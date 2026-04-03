@@ -135,6 +135,7 @@ java -jar target/bea-admin-*.jar
 ## Documentation
 
 - [Frontend README](./bea-front/README.md) - Detailed frontend setup, structure, and development notes
+- [Backend + Postman Quick Guide](./README-BACKEND-POSTMAN.md) - Minimal steps to run backend and test with Postman
 - [Admin Backend Docs](./bea-admin/README.md) - Admin backend configuration (if available)
 - [Client Backend Docs](./bea-client/README.md) - Client backend configuration (if available)
 
