@@ -128,7 +128,7 @@ export default function DashboardPage() {
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3 sm:gap-6">
         {/* Left Column - Charts */}
-        <div className="xl:col-span-2 space-y-6">
+        <div className="xl:col-span-2 space-y-4 sm:space-y-6">
           {/* Weekly Activity Chart */}
           <WeeklyActivityChart data={mockWeeklyActivity} />
 
@@ -140,14 +140,12 @@ export default function DashboardPage() {
             {/* Balance History */}
             <BalanceHistoryChart data={mockBalanceHistory} />
           </div>
-
-          {/* Quick Transfer */}
-          <QuickTransfer contacts={mockQuickTransferContacts} />
         </div>
 
-        {/* Right Column - Transactions */}
-        <div className="xl:pt-0">
+        {/* Right Column - Transactions & Transfer */}
+        <div className="space-y-4 sm:space-y-6">
           <RecentTransactions transactions={state.transactions} />
+          <QuickTransfer contacts={mockQuickTransferContacts} />
         </div>
       </div>
 

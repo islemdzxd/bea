@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,30 @@ interface QuickTransferProps {
 export function QuickTransfer({ contacts }: Readonly<QuickTransferProps>) {
   const [selectedContactId, setSelectedContactId] = useState<string>(contacts[0]?.id || '');
   const [amount, setAmount] = useState('');
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isGrabbing, setIsGrabbing] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLElement>) => {
+    if (!scrollContainerRef.current) return;
+    setIsGrabbing(true);
+    setStartX(e.pageX - scrollContainerRef.current.offsetLeft);
+    setScrollLeft(scrollContainerRef.current.scrollLeft);
+    scrollContainerRef.current.setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLElement>) => {
+    if (!isGrabbing || !scrollContainerRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - scrollContainerRef.current.offsetLeft;
+    const walk = (x - startX) * 1.5;
+    scrollContainerRef.current.scrollLeft = scrollLeft - walk;
+  };
+
+  const handlePointerUp = () => {
+    setIsGrabbing(false);
+  };
 
   const handleSend = () => {
     const selectedContact = contacts.find((c) => c.id === selectedContactId);
@@ -51,12 +75,27 @@ export function QuickTransfer({ contacts }: Readonly<QuickTransferProps>) {
                 </EmptyHeader>
               </Empty>
             ) : (
-              <div className="flex gap-4 overflow-x-auto pb-3">
+              <section
+                ref={scrollContainerRef}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerUp}
+                aria-label="Contacts carousel - drag to scroll"
+                className={`flex gap-4 pb-3 overflow-x-auto scrollbar-hide ${ 
+                  isGrabbing ? 'cursor-grabbing active:cursor-grabbing' : 'cursor-grab'
+                }`}
+                style={{
+                  scrollBehavior: 'smooth',
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none',
+                }}
+              >
                 {contacts.map((contact) => (
                   <button
                     key={contact.id}
                     onClick={() => setSelectedContactId(contact.id)}
-                    className={`flex-shrink-0 rounded-2xl px-1 py-1 text-center transition-all ${
+                    className={`flex-shrink-0 min-w-[110px] rounded-2xl px-3 py-2 text-center transition-all ${
                       selectedContactId === contact.id
                         ? 'bg-primary/5 ring-1 ring-primary/15'
                         : 'opacity-80 hover:opacity-100'
@@ -66,11 +105,11 @@ export function QuickTransfer({ contacts }: Readonly<QuickTransferProps>) {
                       <AvatarImage src={contact.avatar} alt={contact.name} />
                       <AvatarFallback>{contact.name[0]}</AvatarFallback>
                     </Avatar>
-                    <p className="text-sm font-medium text-foreground">{contact.name}</p>
-                    <p className="text-xs text-muted-foreground">{contact.title}</p>
+                    <p className="text-sm font-medium text-foreground line-clamp-1">{contact.name}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-1">{contact.title}</p>
                   </button>
                 ))}
-              </div>
+              </section>
             )}
           </div>
 
