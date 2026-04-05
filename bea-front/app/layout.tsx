@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   description: 'Premium online banking experience for BEA customers.',
   generator: 'Next.js',
   icons: {
-    icon: '/icon.svg',
+    icon: '/bank-logo.svg',
   },
 }
 

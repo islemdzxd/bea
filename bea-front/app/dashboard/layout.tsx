@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
 import { Bell, Settings, LogOut, Menu, X } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -141,24 +142,23 @@ export default function DashboardLayout({
   };
 
   return (
-    <div className="flex min-h-screen bg-background p-3 md:p-4">
+    <div className="flex h-screen overflow-hidden bg-background p-3 md:p-4">
       {/* Sidebar */}
       <aside
         className={`${
           sidebarOpen ? 'w-64' : 'w-20'
-        } glass-surface apple-ring rounded-3xl transition-all duration-300 hidden lg:flex flex-col`}
+        } h-full glass-surface apple-ring rounded-3xl transition-all duration-300 hidden lg:flex flex-col`}
       >
         {/* Logo */}
-        <div className="p-6 border-b border-border/70 flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary rounded-2xl flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-blue-500/20">
-            BA
-          </div>
-          {sidebarOpen && (
-            <div className="flex-1">
-              <h1 className="font-semibold text-primary text-sm tracking-tight">Banque</h1>
-              <p className="text-xs text-muted-foreground tracking-tight">Algerie</p>
-            </div>
-          )}
+        <div className="p-6 border-b border-border/70 flex items-center justify-center">
+          <Image
+            src="/logo%202.svg"
+            alt="BEA logo"
+            width={sidebarOpen ? 230 : 72}
+            height={72}
+            className={sidebarOpen ? 'h-[72px] w-[230px] object-contain' : 'h-[72px] w-[72px] object-contain'}
+            priority
+          />
         </div>
 
         {/* Navigation */}
@@ -196,7 +196,7 @@ export default function DashboardLayout({
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden rounded-3xl glass-surface apple-ring ml-0 lg:ml-4">
+      <div className="flex-1 h-full flex flex-col overflow-hidden rounded-3xl glass-surface apple-ring ml-0 lg:ml-4">
         {/* Top Header */}
         <header className="border-b border-border/70 px-4 md:px-6 py-4 flex items-center justify-between">
           <div className="flex-1 flex items-center gap-4">
