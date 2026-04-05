@@ -32,13 +32,13 @@ export function QuickTransfer({ contacts }: Readonly<QuickTransferProps>) {
   };
 
   return (
-    <Card className="p-6">
-      <CardHeader>
+    <Card className="p-4 sm:p-6">
+      <CardHeader className="px-0 pt-0">
         <CardTitle className="text-xl font-semibold tracking-tight">Quick Transfer</CardTitle>
         <CardDescription>Send money to a frequent contact in a couple of taps.</CardDescription>
       </CardHeader>
 
-      <CardContent className="pt-0">
+      <CardContent className="px-0 pt-0">
         <div className="space-y-6">
           {/* Contacts */}
           <div>

@@ -47,10 +47,10 @@ export function CardsCarousel({ cards }: Readonly<CardsCarouselProps>) {
             variant="hero"
           />
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-border/70 bg-white/60 p-4 shadow-[0_16px_40px_-30px_rgba(26,36,86,0.22)] backdrop-blur-xl">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-border/70 bg-white/60 p-3 shadow-[0_16px_40px_-30px_rgba(26,36,86,0.22)] backdrop-blur-xl sm:p-4">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Current balance</p>
-              <p className="text-2xl font-semibold tracking-tight text-foreground">
+              <p className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
                 {formatCurrency(currentCard.balance)}
               </p>
             </div>
@@ -65,7 +65,7 @@ export function CardsCarousel({ cards }: Readonly<CardsCarouselProps>) {
           </div>
         </div>
 
-        <Card className="p-6">
+        <Card className="p-4 sm:p-6">
           <div className="flex items-center justify-between gap-4 mb-5">
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Portfolio</p>

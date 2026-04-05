@@ -19,13 +19,13 @@ export function RecentTransactions({ transactions }: Readonly<RecentTransactions
   };
 
   return (
-    <Card className="h-full p-6">
-      <CardHeader>
+    <Card className="p-4 sm:p-6">
+      <CardHeader className="px-0 pt-0">
         <CardTitle className="text-xl font-semibold tracking-tight">Recent Transactions</CardTitle>
         <CardDescription>Latest account movements with a clean, readable summary.</CardDescription>
       </CardHeader>
 
-      <CardContent className="pt-0">
+      <CardContent className="px-0 pt-0">
         {transactions.length === 0 ? (
           <Empty>
             <EmptyHeader>
@@ -39,9 +39,9 @@ export function RecentTransactions({ transactions }: Readonly<RecentTransactions
             {transactions.map((transaction) => (
               <div
                 key={transaction.id}
-                className="group rounded-3xl border border-border/70 bg-white/70 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_36px_-26px_rgba(26,36,86,0.24)] sm:p-5"
+                className="group rounded-3xl border border-border/70 bg-white/70 p-3 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_36px_-26px_rgba(26,36,86,0.24)] sm:p-5"
               >
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div className="flex items-start gap-4 min-w-0">
                     <div
                       className="flex h-14 w-14 items-center justify-center rounded-3xl text-xl shadow-[0_12px_24px_-16px_rgba(26,36,86,0.35)] transition-transform duration-200 group-hover:scale-[1.03]"
@@ -51,7 +51,7 @@ export function RecentTransactions({ transactions }: Readonly<RecentTransactions
                     </div>
 
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
                         <p className="truncate font-semibold text-foreground">{transaction.title}</p>
                         <span className="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-secondary-foreground">
                           {transaction.kind}
@@ -63,8 +63,8 @@ export function RecentTransactions({ transactions }: Readonly<RecentTransactions
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end sm:text-right">
-                    <p className={`text-lg font-semibold tracking-tight ${getTransactionColor(transaction)}`}>
+                  <div className="flex flex-wrap items-center justify-between gap-2 md:flex-col md:items-end md:text-right">
+                    <p className={`text-base font-semibold tracking-tight sm:text-lg ${getTransactionColor(transaction)}`}>
                       {transaction.type === 'withdrawal' ? '-' : '+'}${transaction.amount}
                     </p>
                     <span className="inline-flex items-center rounded-full border border-border/70 bg-white/80 px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm">

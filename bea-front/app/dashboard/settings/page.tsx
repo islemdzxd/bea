@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react';
-import { mockUser } from '@/lib/mock-data';
+import { Eye, EyeOff, CheckCircle } from 'lucide-react';
+import { getSessionClientProfile } from '@/lib/client-session';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'password' | 'profile' | 'security'>('password');
@@ -23,10 +23,10 @@ export default function SettingsPage() {
   const [passwordSuccess, setPasswordSuccess] = useState('');
 
   const [profileForm, setProfileForm] = useState({
-    firstName: mockUser.firstName,
-    lastName: mockUser.lastName,
-    email: mockUser.email,
-    phone: mockUser.phone,
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
   });
   const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
   const [profileSuccess, setProfileSuccess] = useState('');
@@ -37,6 +37,19 @@ export default function SettingsPage() {
     loginAlerts: true,
     sessionTimeout: '30',
   });
+
+  useEffect(() => {
+    const profile = getSessionClientProfile();
+    if (!profile) return;
+
+    const fallbackEmail = profile.cli ? `${profile.cli.toLowerCase()}@bea.local` : '';
+    setProfileForm({
+      firstName: profile.prenom ?? profile.firstName ?? '',
+      lastName: profile.nom ?? profile.lastName ?? '',
+      email: profile.email ?? fallbackEmail,
+      phone: profile.phone ?? '',
+    });
+  }, []);
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;

@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { Bell, Settings, LogOut, Menu, X } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { mockUser } from '@/lib/mock-data';
+import { getSessionClientProfile } from '@/lib/client-session';
 
 interface SidebarItem {
   icon: React.ReactNode;
@@ -93,21 +93,52 @@ export default function DashboardLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const [clientName, setClientName] = useState('Client');
+  const [clientEmail, setClientEmail] = useState('client@bea.local');
+  const [avatarSrc, setAvatarSrc] = useState('https://api.dicebear.com/7.x/avataaars/svg?seed=Client');
+
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  useEffect(() => {
+    const profile = getSessionClientProfile();
+    if (!profile) return;
+
+    const resolvedName = [profile.prenom ?? profile.firstName, profile.nom ?? profile.lastName]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    const fallbackEmail = profile.cli ? `${profile.cli.toLowerCase()}@bea.local` : 'client@bea.local';
+    const avatarSeed = (resolvedName || profile.cli || 'Client').replaceAll(' ', '-');
+
+    setClientName(resolvedName || profile.cli || 'Client');
+    setClientEmail(profile.email || fallbackEmail);
+    setAvatarSrc(profile.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}`);
+  }, []);
+
+  const avatarFallback = useMemo(() => clientName.slice(0, 1).toUpperCase() || 'C', [clientName]);
+
   const handleLogout = () => {
     localStorage.removeItem('isLoggedIn');
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('bea_client_token');
+    localStorage.removeItem('bea_client_profile');
+    sessionStorage.removeItem('bea_client_token');
+    sessionStorage.removeItem('bea_client_profile');
     localStorage.removeItem('bea-banking-state-v1');
     router.push('/');
   };
 
-  const activeSidebarItem = sidebarItems.find(
-    (item) => item.href === pathname || pathname.startsWith(item.href)
-  );
+  const isSidebarItemActive = (href: string) => {
+    if (href === '/dashboard') {
+      return pathname === '/dashboard';
+    }
+
+    return pathname === href || pathname.startsWith(`${href}/`);
+  };
 
   return (
     <div className="flex min-h-screen bg-background p-3 md:p-4">
@@ -137,7 +168,7 @@ export default function DashboardLayout({
               key={item.id}
               href={item.href}
               className={`flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-200 ${
-                activeSidebarItem?.id === item.id
+                isSidebarItemActive(item.href)
                   ? 'bg-primary text-white shadow-lg shadow-blue-500/25'
                   : 'text-sidebar-foreground hover:bg-sidebar-accent/80'
               }`}
@@ -200,12 +231,12 @@ export default function DashboardLayout({
             </Button>
             <div className="flex items-center gap-2 pl-4 border-l border-border/70">
               <div className="hidden sm:block text-right">
-                <p className="text-sm font-medium">{mockUser.firstName}</p>
-                <p className="text-xs text-muted-foreground">{mockUser.email}</p>
+                <p className="text-sm font-medium">{clientName}</p>
+                <p className="text-xs text-muted-foreground">{clientEmail}</p>
               </div>
               <Avatar className="h-10 w-10">
-                <AvatarImage src={mockUser.avatar} alt={mockUser.firstName} />
-                <AvatarFallback>{mockUser.firstName[0]}</AvatarFallback>
+                <AvatarImage src={avatarSrc} alt={clientName} />
+                <AvatarFallback>{avatarFallback}</AvatarFallback>
               </Avatar>
             </div>
           </div>
@@ -220,7 +251,7 @@ export default function DashboardLayout({
                   key={item.id}
                   href={item.href}
                   className={`flex items-center gap-3 px-4 py-3 rounded-2xl transition-all ${
-                    activeSidebarItem?.id === item.id
+                    isSidebarItemActive(item.href)
                       ? 'bg-primary text-white shadow-lg shadow-blue-500/25'
                       : 'text-sidebar-foreground hover:bg-sidebar-accent/80'
                   }`}

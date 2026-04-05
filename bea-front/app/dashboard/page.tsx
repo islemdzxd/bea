@@ -21,7 +21,7 @@ export default function DashboardPage() {
   const latestNotifications = state.notifications.slice(0, 4);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Page Title */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
@@ -88,7 +88,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <Card className="p-6">
+        <Card className="p-4 sm:p-6">
           <CardHeader className="px-0 pt-0">
             <CardTitle className="text-lg font-semibold tracking-tight">Available balance</CardTitle>
             <CardDescription>Primary account balance in real time.</CardDescription>
@@ -99,7 +99,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="p-6">
+        <Card className="p-4 sm:p-6">
           <CardHeader className="px-0 pt-0">
             <CardTitle className="text-lg font-semibold tracking-tight">Active requests</CardTitle>
             <CardDescription>Pending credit and allocation requests.</CardDescription>
@@ -110,7 +110,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="p-6">
+        <Card className="p-4 sm:p-6">
           <CardHeader className="px-0 pt-0">
             <CardTitle className="text-lg font-semibold tracking-tight">Notifications</CardTitle>
             <CardDescription>Latest system and banking alerts.</CardDescription>
@@ -126,14 +126,14 @@ export default function DashboardPage() {
       <CardsCarousel cards={mockCards} />
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3 sm:gap-6">
         {/* Left Column - Charts */}
         <div className="xl:col-span-2 space-y-6">
           {/* Weekly Activity Chart */}
           <WeeklyActivityChart data={mockWeeklyActivity} />
 
           {/* Charts Row */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2 sm:gap-6">
             {/* Expense Statistics */}
             <ExpenseStatisticsChart data={mockExpenseStatistics} />
 
@@ -151,8 +151,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_1fr]">
-        <Card className="p-6">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1fr] sm:gap-6">
+        <Card className="p-4 sm:p-6">
           <CardHeader className="px-0 pt-0">
             <CardTitle className="text-lg font-semibold tracking-tight">Active requests</CardTitle>
             <CardDescription>Requests waiting for review or requiring follow-up.</CardDescription>
@@ -176,7 +176,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="p-6">
+        <Card className="p-4 sm:p-6">
           <CardHeader className="px-0 pt-0">
             <CardTitle className="text-lg font-semibold tracking-tight">Notifications</CardTitle>
             <CardDescription>Operational updates from the banking hub.</CardDescription>

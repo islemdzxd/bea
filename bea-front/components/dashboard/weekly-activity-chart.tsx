@@ -25,14 +25,14 @@ interface WeeklyActivityChartProps {
 
 export function WeeklyActivityChart({ data }: Readonly<WeeklyActivityChartProps>) {
   return (
-    <Card className="p-6">
-      <CardHeader>
+    <Card className="p-4 sm:p-6">
+      <CardHeader className="px-0 pt-0">
         <CardTitle className="text-xl font-semibold tracking-tight">Weekly Activity</CardTitle>
         <CardDescription>Track daily inflow and outflow with a cleaner at-a-glance chart.</CardDescription>
       </CardHeader>
 
-      <CardContent className="pt-0">
-        <ResponsiveContainer width="100%" height={300}>
+      <CardContent className="px-0 pt-0">
+        <ResponsiveContainer width="100%" height={260}>
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
             <XAxis
