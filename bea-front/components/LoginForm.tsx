@@ -188,6 +188,8 @@ export default function LoginForm() {
         })
       );
 
+      globalThis.window.dispatchEvent(new Event('bea-auth-changed'));
+
       router.push("/dashboard");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Login failed. Please try again.");

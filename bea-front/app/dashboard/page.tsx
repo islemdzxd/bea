@@ -17,8 +17,10 @@ import { useBanking } from '@/features/banking/banking-provider';
 export default function DashboardPage() {
   const { state } = useBanking();
   const primaryAccount = state.accounts[0];
+  const availableBalance = state.totalBalance || state.totalIndicativeBalance;
   const activeRequests = [...state.allocationRequests, ...state.creditRequests].filter((request) => request.status === 'pending');
   const latestNotifications = state.notifications.slice(0, 4);
+  const recentMovements = state.transactions.slice(0, 6);
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -94,8 +96,8 @@ export default function DashboardPage() {
             <CardDescription>Primary account balance in real time.</CardDescription>
           </CardHeader>
           <CardContent className="px-0 pb-0">
-            <p className="text-3xl font-semibold tracking-tight text-foreground">{primaryAccount?.balance.toLocaleString()} {primaryAccount?.currency}</p>
-            <p className="mt-2 text-sm text-muted-foreground">{primaryAccount?.label} • {primaryAccount?.iban}</p>
+            <p className="text-3xl font-semibold tracking-tight text-foreground">{availableBalance.toLocaleString()} {primaryAccount?.currency ?? 'DZD'}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{primaryAccount?.label ?? 'Primary account'} • {primaryAccount?.iban ?? '—'}</p>
           </CardContent>
         </Card>
 
@@ -118,6 +120,104 @@ export default function DashboardPage() {
           <CardContent className="px-0 pb-0">
             <p className="text-3xl font-semibold tracking-tight text-foreground">{latestNotifications.length}</p>
             <p className="mt-2 text-sm text-muted-foreground">Unread or recent account updates.</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 sm:gap-6">
+        <Card className="p-4 sm:p-6">
+          <CardHeader className="px-0 pt-0">
+            <CardTitle className="text-lg font-semibold tracking-tight">Accounts</CardTitle>
+            <CardDescription>All accounts loaded from the database for this client.</CardDescription>
+          </CardHeader>
+          <CardContent className="px-0 pb-0 space-y-3">
+            {state.accounts.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No accounts found for this client.</div>
+            ) : (
+              state.accounts.map((account) => (
+                <div key={account.id} className="rounded-2xl border border-border/70 bg-white/70 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-foreground">{account.label}</p>
+                      <p className="text-xs text-muted-foreground">{account.iban} • {account.rib}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-foreground">{account.balance.toLocaleString()} {account.currency}</p>
+                      <p className="text-xs text-muted-foreground">{account.type}</p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="p-4 sm:p-6">
+          <CardHeader className="px-0 pt-0">
+            <CardTitle className="text-lg font-semibold tracking-tight">Recent transactions</CardTitle>
+            <CardDescription>Latest movements returned by the backend.</CardDescription>
+          </CardHeader>
+          <CardContent className="px-0 pb-0 space-y-3">
+            {recentMovements.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No recent movements yet.</div>
+            ) : (
+              recentMovements.map((movement) => (
+                <div key={movement.id} className="rounded-2xl border border-border/70 bg-white/70 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-foreground">{movement.title}</p>
+                      <p className="text-xs text-muted-foreground">{movement.subtitle}</p>
+                    </div>
+                    <p className={`font-semibold ${movement.amount >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                      {movement.amount >= 0 ? '+' : ''}{movement.amount.toLocaleString()}
+                    </p>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">{new Date(movement.date).toLocaleString()}</p>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="p-4 sm:p-6">
+          <CardHeader className="px-0 pt-0">
+            <CardTitle className="text-lg font-semibold tracking-tight">Account movements</CardTitle>
+            <CardDescription>Latest movements grouped by account number.</CardDescription>
+          </CardHeader>
+          <CardContent className="px-0 pb-0 space-y-4">
+            {state.accounts.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No account movements available.</div>
+            ) : (
+              state.accounts.map((account) => {
+                const accountMovements = state.transactions.filter((movement) => movement.accountId === account.id).slice(0, 3);
+
+                return (
+                  <div key={account.id} className="rounded-2xl border border-border/70 bg-white/70 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-foreground">{account.label}</p>
+                        <p className="text-xs text-muted-foreground">{account.id}</p>
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">{account.balance.toLocaleString()} {account.currency}</p>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {accountMovements.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No recent movements for this account.</p>
+                      ) : (
+                        accountMovements.map((movement) => (
+                          <div key={movement.id} className="flex items-center justify-between gap-3 text-sm">
+                            <span className="truncate text-muted-foreground">{movement.title}</span>
+                            <span className={movement.amount >= 0 ? 'font-medium text-emerald-700' : 'font-medium text-red-600'}>
+                              {movement.amount >= 0 ? '+' : ''}{movement.amount.toLocaleString()}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </CardContent>
         </Card>
       </div>

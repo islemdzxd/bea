@@ -39,6 +39,12 @@ public class Client {
     @Column(name = "date_creation")
     private LocalDate dateCreation;
 
+    @Column(name = "email")
+    private String email;
+
+    @Column(name = "phone")
+    private String phone;
+
     @Column(name = "intitule")
     private String intitule;
 

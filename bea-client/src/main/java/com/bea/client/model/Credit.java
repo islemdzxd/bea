@@ -37,6 +37,27 @@ public class Credit {
 	@Column(name = "montant_pret", precision = 15, scale = 2)
 	private BigDecimal montantPret;
 
+	@Column(name = "montant_bien", precision = 15, scale = 2)
+	private BigDecimal montantBien;
+
+	@Column(name = "salaire_mensuel", precision = 15, scale = 2)
+	private BigDecimal salaireMensuel;
+
+	@Column(name = "duree_mois")
+	private Integer dureeMois;
+
+	@Column(name = "statut_travail", length = 30)
+	private String statutTravail;
+
+	@Column(name = "salary_slip_path", length = 255)
+	private String salarySlipPath;
+
+	@Column(name = "work_certificate_path", length = 255)
+	private String workCertificatePath;
+
+	@Column(name = "id_document_path", length = 255)
+	private String idDocumentPath;
+
 	@Column(name = "code_utilisateur", length = 50)
 	private String codeUtilisateur;
 

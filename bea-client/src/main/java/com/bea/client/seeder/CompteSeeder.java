@@ -1,6 +1,7 @@
 package com.bea.client.seeder;
 
 import com.bea.client.model.Compte;
+import com.bea.client.model.Client;
 import com.bea.client.repository.ClientRepository;
 import com.bea.client.repository.CompteRepository;
 import lombok.RequiredArgsConstructor;
@@ -12,8 +13,11 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.stream.Collectors;
 
 @Component
 @Profile("seed")
@@ -37,29 +41,43 @@ public class CompteSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        if (compteRepository.count() > 0) {
-            System.out.println("✅ Table comptes déjà remplie. Seeder ignoré.");
-            return;
-        }
-
-        System.out.println("🚀 Génération des comptes...");
-
-        Random random = new Random();
-        List<Compte> comptes = new ArrayList<>();
-
-        List<String> clis = clientRepository.findAll()
-                .stream()
-                .map(client -> client.getCli())
-                .toList();
-
-        if (clis.isEmpty()) {
+        List<Client> clients = clientRepository.findAll();
+        if (clients.isEmpty()) {
             System.out.println("⚠️ Aucun client trouvé. Seeder comptes annulé.");
             return;
         }
 
-        for (int i = 1; i <= 10000; i++) {
-            String agence = AGENCES[random.nextInt(AGENCES.length)];
-            String numeroCompte = String.format("%010d", i);
+        Map<String, Long> comptesParClient = compteRepository.findAll().stream()
+                .filter(compte -> compte.getCodeUtilisateur() != null && !compte.getCodeUtilisateur().isBlank())
+                .collect(Collectors.groupingBy(Compte::getCodeUtilisateur, Collectors.counting()));
+
+        List<Client> clientsSansCompte = clients.stream()
+                .filter(client -> comptesParClient.getOrDefault(client.getCli(), 0L) == 0L)
+                .toList();
+
+        if (clientsSansCompte.isEmpty()) {
+            System.out.println("✅ Tous les clients disposent déjà d'au moins un compte. Seeder ignoré.");
+            return;
+        }
+
+        System.out.println("🚀 Génération des comptes manquants...");
+
+        Random random = new Random();
+        List<Compte> comptes = new ArrayList<>();
+
+        long maxExistingAccountNumber = compteRepository.findAll().stream()
+                .map(Compte::getNumeroCompte)
+                .filter(numeroCompte -> numeroCompte != null && numeroCompte.matches("\\d+"))
+                .mapToLong(Long::parseLong)
+                .max()
+                .orElse(0L);
+
+        long nextNumeroCompte = maxExistingAccountNumber + 1;
+
+        for (int i = 0; i < clientsSansCompte.size(); i++) {
+            Client client = clientsSansCompte.get(i);
+            String agence = client.getAgence() != null ? client.getAgence() : AGENCES[random.nextInt(AGENCES.length)];
+            String numeroCompte = String.format("%010d", nextNumeroCompte++);
 
             LocalDate dateOuverture = LocalDate.of(
                     2005 + random.nextInt(18),
@@ -69,7 +87,6 @@ public class CompteSeeder implements CommandLineRunner {
 
             BigDecimal soldeComptable = BigDecimal.valueOf(10_000 + random.nextInt(9_000_000)).setScale(2);
             BigDecimal soldeIndicatif = soldeComptable.add(BigDecimal.valueOf(random.nextInt(50_000))).setScale(2);
-            String cli = clis.get(random.nextInt(clis.size()));
 
             Compte compte = new Compte();
             compte.setNumeroCompte(numeroCompte);
@@ -81,7 +98,7 @@ public class CompteSeeder implements CommandLineRunner {
             compte.setSoldeComptable(soldeComptable);
             compte.setSoldeIndicatif(soldeIndicatif);
             compte.setCleRib(String.valueOf(10 + random.nextInt(90)));
-            compte.setCodeUtilisateur(cli);
+            compte.setCodeUtilisateur(client.getCli());
             compte.setSensCompte(SENS[random.nextInt(SENS.length)]);
 
             comptes.add(compte);
@@ -89,7 +106,7 @@ public class CompteSeeder implements CommandLineRunner {
             if (comptes.size() == 500) {
                 compteRepository.saveAll(comptes);
                 comptes.clear();
-                System.out.println("✅ " + i + " comptes insérés...");
+                System.out.println("✅ " + (i + 1) + " comptes insérés...");
             }
         }
 
@@ -97,6 +114,6 @@ public class CompteSeeder implements CommandLineRunner {
             compteRepository.saveAll(comptes);
         }
 
-        System.out.println("🎉 10 000 comptes générés avec succès !");
+        System.out.println("🎉 " + clientsSansCompte.size() + " comptes manquants générés avec succès !");
     }
 }

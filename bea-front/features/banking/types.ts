@@ -134,6 +134,9 @@ export interface NotificationItem {
 
 export interface BankingState {
   accounts: BankingAccount[];
+  totalBalance: number;
+  totalIndicativeBalance: number;
+  totalAccounts: number;
   allocationRequests: AllocationRequest[];
   creditRequests: CreditRequest[];
   transferOrders: TransferOrder[];
@@ -160,6 +163,10 @@ export interface AllocationSubmissionInput {
   amount: number;
   passportFileName: string;
   ticketFileName: string;
+  passportFile?: File | null;
+  passportVisaFile?: File | null;
+  passportNeantFile?: File | null;
+  ticketFile?: File | null;
   ageAtDeparture: number;
   businessDecision: RequestStatus;
   decisionReason?: string;
@@ -175,6 +182,9 @@ export interface CreditSubmissionInput {
   salarySlipFileName: string;
   workCertificateFileName: string;
   idDocumentFileName: string;
+  salarySlipFile?: File | null;
+  workCertificateFile?: File | null;
+  idDocumentFile?: File | null;
   businessDecision: RequestStatus;
   estimatedMonthlyPayment: number;
   decisionReason?: string;

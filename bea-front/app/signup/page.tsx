@@ -1,11 +1,18 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, type SyntheticEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Eye, EyeOff } from 'lucide-react';
+
+type RegisterResponse = {
+  token: string;
+  nom: string;
+  prenom: string;
+  cli: string;
+};
 
 export default function SignupPage() {
   const router = useRouter();
@@ -28,7 +35,7 @@ export default function SignupPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSignup = async (e: React.FormEvent) => {
+  const handleSignup = async (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
@@ -74,9 +81,52 @@ export default function SignupPage() {
       return;
     }
 
-    // Mock signup
-    setTimeout(() => {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_CLIENT_API_BASE_URL ?? 'http://localhost:8080';
+      const response = await fetch(`${baseUrl}/api/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          firstName: formData.firstName.trim(),
+          lastName: formData.lastName.trim(),
+          email: formData.email.trim(),
+          phone: formData.phone.trim(),
+          password: formData.password,
+          dateOfBirth: formData.dateOfBirth,
+        }),
+      });
+
+      if (!response.ok) {
+        let message = 'Account creation failed.';
+        try {
+          const text = await response.text();
+          if (text.trim()) {
+            message = text;
+          }
+        } catch {
+          // Keep fallback message.
+        }
+        throw new Error(message);
+      }
+
+      const data = (await response.json()) as RegisterResponse;
+      if (!data.token) {
+        throw new Error('Authentication token was not returned by the server.');
+      }
+
       localStorage.setItem('isLoggedIn', 'true');
+      localStorage.setItem('bea_client_token', data.token);
+      localStorage.setItem(
+        'bea_client_profile',
+        JSON.stringify({
+          cli: data.cli,
+          nom: data.nom,
+          prenom: data.prenom,
+          email: formData.email,
+        })
+      );
       localStorage.setItem(
         'currentUser',
         JSON.stringify({
@@ -87,9 +137,14 @@ export default function SignupPage() {
           dateOfBirth: formData.dateOfBirth,
         })
       );
+
+      globalThis.window.dispatchEvent(new Event('bea-auth-changed'));
       router.push('/dashboard');
+    } catch (signupError) {
+      setError(signupError instanceof Error ? signupError.message : 'Account creation failed.');
+    } finally {
       setIsLoading(false);
-    }, 500);
+    }
   };
 
   return (
@@ -121,8 +176,9 @@ export default function SignupPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">First Name</label>
+                <label htmlFor="signup-first-name" className="text-sm font-medium text-foreground">First Name</label>
                 <Input
+                  id="signup-first-name"
                   type="text"
                   name="firstName"
                   placeholder="John"
@@ -132,8 +188,9 @@ export default function SignupPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Last Name</label>
+                <label htmlFor="signup-last-name" className="text-sm font-medium text-foreground">Last Name</label>
                 <Input
+                  id="signup-last-name"
                   type="text"
                   name="lastName"
                   placeholder="Doe"
@@ -145,8 +202,9 @@ export default function SignupPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Email</label>
+              <label htmlFor="signup-email" className="text-sm font-medium text-foreground">Email</label>
               <Input
+                id="signup-email"
                 type="email"
                 name="email"
                 placeholder="your@email.com"
@@ -157,8 +215,9 @@ export default function SignupPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Phone</label>
+              <label htmlFor="signup-phone" className="text-sm font-medium text-foreground">Phone</label>
               <Input
+                id="signup-phone"
                 type="tel"
                 name="phone"
                 placeholder="+213 555 123456"
@@ -169,8 +228,9 @@ export default function SignupPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Date of Birth</label>
+              <label htmlFor="signup-date-of-birth" className="text-sm font-medium text-foreground">Date of Birth</label>
               <Input
+                id="signup-date-of-birth"
                 type="date"
                 name="dateOfBirth"
                 value={formData.dateOfBirth}
@@ -180,9 +240,10 @@ export default function SignupPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Password</label>
+              <label htmlFor="signup-password" className="text-sm font-medium text-foreground">Password</label>
               <div className="relative">
                 <Input
+                  id="signup-password"
                   type={showPassword ? 'text' : 'password'}
                   name="password"
                   placeholder="••••••••"
@@ -205,9 +266,10 @@ export default function SignupPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Confirm Password</label>
+              <label htmlFor="signup-confirm-password" className="text-sm font-medium text-foreground">Confirm Password</label>
               <div className="relative">
                 <Input
+                  id="signup-confirm-password"
                   type={showConfirmPassword ? 'text' : 'password'}
                   name="confirmPassword"
                   placeholder="••••••••"

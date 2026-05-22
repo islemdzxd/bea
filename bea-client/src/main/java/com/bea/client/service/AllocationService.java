@@ -1,1 +1,304 @@
 package com.bea.client.service;
+
+import com.bea.client.dto.allocation.AllocationContextResponse;
+import com.bea.client.dto.allocation.AllocationRequestResponse;
+import com.bea.client.dto.allocation.AllocationSubmissionRequest;
+import com.bea.client.model.Allocation;
+import com.bea.client.model.Client;
+import com.bea.client.repository.AllocationRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.LocalDate;
+import java.time.Year;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class AllocationService {
+
+    private static final String STATUS_PENDING = "EN_ATTENTE";
+    private static final BigDecimal ADULT_LIMIT = BigDecimal.valueOf(750);
+    private static final BigDecimal MINOR_LIMIT = BigDecimal.valueOf(300);
+    private static final Path STORAGE_ROOT = Paths.get("uploads", "allocation");
+
+    private final AllocationRepository allocationRepository;
+
+    public AllocationContextResponse getContext(Client client) {
+        List<Allocation> history = allocationRepository.findByAddByOrderByDateSaisieDesc(client.getCli());
+        Allocation latest = history.stream().findFirst().orElse(null);
+
+        return AllocationContextResponse.builder()
+                .cli(client.getCli())
+                .nin(client.getNin())
+                .nom(client.getNom())
+                .prenom(client.getPrenom())
+                .dateNaissance(client.getDateNaissance())
+                .lieuNaissance(client.getLieuNaissance())
+                .agence(client.getAgence())
+                .alreadyUsedThisYear(!history.isEmpty() && history.stream().anyMatch(allocation -> allocation.getDateSaisie() != null && allocation.getDateSaisie().getYear() == LocalDate.now().getYear()))
+                .latestRequest(latest == null ? null : toResponse(client, latest))
+                .build();
+    }
+
+    public List<AllocationRequestResponse> getHistory(Client client) {
+        return allocationRepository.findByAddByOrderByDateSaisieDesc(client.getCli()).stream()
+                .map(allocation -> toResponse(client, allocation))
+                .toList();
+    }
+
+    public AllocationRequestResponse getRequest(Client client, String codeDeclaration) {
+        Allocation allocation = allocationRepository.findById(codeDeclaration)
+                .orElseThrow(() -> new RuntimeException("Allocation request not found"));
+        if (!client.getCli().equals(allocation.getAddBy())) {
+            throw new RuntimeException("Allocation request not found");
+        }
+        return toResponse(client, allocation);
+    }
+
+    public AllocationRequestResponse submit(Client client, AllocationSubmissionRequest request) {
+        validateBusinessRules(client, request);
+
+        String codeDeclaration = generateCodeDeclaration();
+        Allocation allocation = new Allocation();
+        allocation.setCodeDeclaration(codeDeclaration);
+        allocation.setDateArrete(LocalDate.now());
+        allocation.setCodeAgence(client.getAgence());
+        allocation.setEtablissementDec("BEA");
+        allocation.setNin(client.getNin());
+        allocation.setDateOctroi(LocalDate.now());
+        allocation.setNomBenefi(client.getNom());
+        allocation.setPrenom(client.getPrenom());
+        allocation.setCommuneNaissanceBenf(client.getLieuNaissance());
+        allocation.setDateNaissanceBenf(client.getDateNaissance());
+        allocation.setNumPasseport(request.getPassportNumber().trim().toUpperCase());
+        allocation.setDelivPassp(request.getDateAllez().minusDays(30));
+        allocation.setDExpPassp(request.getPassportExpiryDate());
+        allocation.setCdMoyenTrans(normalizeTransportCode(request.getCdMoyenTrans(), request.getTravelType()));
+        allocation.setMoyenTrans(normalizeTransportLabel(request.getMoyenTrans(), request.getTravelType()));
+        allocation.setCodePostFrontalier(request.getCodePostFrontalier());
+        allocation.setDesignationPostFr(request.getDesignationPostFr());
+        allocation.setDateAllez(request.getDateAllez());
+        allocation.setDateRetour(request.getDateRetour());
+        allocation.setCodePays(request.getCodePays());
+        allocation.setNomPays(request.getNomPays());
+        allocation.setMoannaie(request.getCodeMonnaie());
+        allocation.setMontantEur(request.getMontantTotal().setScale(2, RoundingMode.HALF_UP));
+        allocation.setCours(BigDecimal.ONE.setScale(4, RoundingMode.HALF_UP));
+        allocation.setContreValeur(request.getMontantTotal().setScale(2, RoundingMode.HALF_UP));
+        allocation.setAddBy(client.getCli());
+        allocation.setEtat(STATUS_PENDING);
+        allocation.setEve(STATUS_PENDING);
+        allocation.setStatu(STATUS_PENDING);
+        allocation.setCodeMonnaie(request.getCodeMonnaie());
+        allocation.setMonChiffre(request.getMontantTotal().setScale(2, RoundingMode.HALF_UP));
+        allocation.setCivility("Mr");
+        allocation.setNorDre("ORD" + codeDeclaration.substring(3));
+        allocation.setMontantLettre(request.getMontantTotal() + " " + request.getCodeMonnaie());
+        allocation.setMonTotalLettre(request.getMontantTotal() + " " + request.getCodeMonnaie());
+        allocation.setMontantTotal(request.getMontantTotal().setScale(2, RoundingMode.HALF_UP));
+        allocation.setPhone(null);
+        allocation.setEmail(null);
+        allocation.setDateSaisie(LocalDate.now());
+        allocation.setDateVerif(null);
+        allocation.setDateVers(null);
+        allocation.setObservation(blankToNull(request.getObservation()));
+        allocation.setVerifBy(null);
+        allocation.setValidBy(null);
+        allocation.setDateAb(null);
+        allocation.setAbBy(null);
+
+        String allocationFolder = allocation.getCodeDeclaration();
+        allocation.setPassportMainPagePath(storeFile(client, allocationFolder, "passport-main", request.getPassportMainPage()));
+        allocation.setPassportVisaPagePath(storeFile(client, allocationFolder, "passport-visa", request.getPassportVisaPage()));
+        allocation.setPassportNeantPagePath(storeFile(client, allocationFolder, "passport-neant", request.getPassportNeantPage()));
+        allocation.setTicketCopyPath(storeFile(client, allocationFolder, "ticket-copy", request.getTicketCopy()));
+
+        Allocation saved = allocationRepository.save(allocation);
+        return toResponse(client, saved);
+    }
+
+    private void validateBusinessRules(Client client, AllocationSubmissionRequest request) {
+        LocalDate today = LocalDate.now();
+        LocalDate departureDate = requireDate(request.getDateAllez(), "Departure date is required");
+        LocalDate returnDate = requireDate(request.getDateRetour(), "Return date is required");
+        LocalDate passportExpiryDate = requireDate(request.getPassportExpiryDate(), "Passport expiration date is required");
+        BigDecimal amount = requireAmount(request.getMontantTotal(), "Allocation amount is required");
+
+        if (!StringUtils.hasText(client.getNin())) {
+            throw new RuntimeException("Client NIN is missing");
+        }
+
+        if (ChronoUnit.DAYS.between(today, departureDate) < 5) {
+            throw new RuntimeException("Departure date must be at least 5 calendar days from today");
+        }
+
+        if (!returnDate.isAfter(departureDate)) {
+            throw new RuntimeException("Return date must be after departure date");
+        }
+
+        if (ChronoUnit.DAYS.between(departureDate, returnDate) < 7) {
+            throw new RuntimeException("Stay duration must be at least 7 days");
+        }
+
+        if (!passportExpiryDate.isAfter(returnDate)) {
+            throw new RuntimeException("Passport must remain valid throughout the trip");
+        }
+
+        if (request.getPassportMainPage() == null || request.getPassportMainPage().isEmpty()) {
+            throw new RuntimeException("Passport main page is required");
+        }
+
+        if (request.getTicketCopy() == null || request.getTicketCopy().isEmpty()) {
+            throw new RuntimeException("Travel ticket is required");
+        }
+
+        if (amount.remainder(BigDecimal.valueOf(50)).compareTo(BigDecimal.ZERO) != 0) {
+            throw new RuntimeException("Allocation amount must be a multiple of 50");
+        }
+
+        BigDecimal limit = isAdult(client, departureDate) ? ADULT_LIMIT : MINOR_LIMIT;
+        if (amount.compareTo(limit) > 0) {
+            throw new RuntimeException("Allocation amount cannot exceed " + limit.toPlainString());
+        }
+
+        LocalDate yearStart = LocalDate.of(departureDate.getYear(), 1, 1);
+        LocalDate yearEnd = LocalDate.of(departureDate.getYear(), 12, 31);
+        if (allocationRepository.existsByNinAndDateSaisieBetween(client.getNin(), yearStart, yearEnd)) {
+            throw new RuntimeException("This NIN has already used the tourist allocation for the current year");
+        }
+
+        if (!StringUtils.hasText(request.getCodePays()) || !StringUtils.hasText(request.getNomPays())) {
+            throw new RuntimeException("Destination country is required");
+        }
+
+        if (!StringUtils.hasText(request.getPassportNumber())) {
+            throw new RuntimeException("Passport number is required");
+        }
+    }
+
+    private boolean isAdult(Client client, LocalDate departureDate) {
+        if (client.getDateNaissance() == null) {
+            return true;
+        }
+        return ChronoUnit.YEARS.between(client.getDateNaissance(), departureDate) >= 19;
+    }
+
+    private LocalDate requireDate(LocalDate date, String message) {
+        if (date == null) {
+            throw new RuntimeException(message);
+        }
+        return date;
+    }
+
+    private BigDecimal requireAmount(BigDecimal amount, String message) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RuntimeException(message);
+        }
+        return amount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String generateCodeDeclaration() {
+        return "DEC" + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+    }
+
+    private String storeFile(Client client, String folderName, String prefix, MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            return null;
+        }
+
+        try {
+            Path folder = STORAGE_ROOT.resolve(client.getCli()).resolve(folderName);
+            Files.createDirectories(folder);
+
+            String originalName = StringUtils.cleanPath(file.getOriginalFilename() == null ? "document" : file.getOriginalFilename());
+            String extension = "";
+            int dotIndex = originalName.lastIndexOf('.');
+            if (dotIndex >= 0) {
+                extension = originalName.substring(dotIndex);
+            }
+
+            String fileName = prefix + extension;
+            Path target = folder.resolve(fileName);
+            Files.write(target, file.getBytes());
+            return target.toString();
+        } catch (IOException exception) {
+            throw new RuntimeException("Failed to store uploaded file", exception);
+        }
+    }
+
+    private String normalizeTransportCode(String providedCode, String travelType) {
+        if (StringUtils.hasText(providedCode)) {
+            return providedCode.trim();
+        }
+        if (!StringUtils.hasText(travelType)) {
+            return null;
+        }
+        return switch (travelType.trim().toLowerCase()) {
+            case "airline" -> "AIR";
+            case "maritime" -> "MAR";
+            default -> travelType.trim().toUpperCase();
+        };
+    }
+
+    private String normalizeTransportLabel(String providedLabel, String travelType) {
+        if (StringUtils.hasText(providedLabel)) {
+            return providedLabel.trim();
+        }
+        if (!StringUtils.hasText(travelType)) {
+            return null;
+        }
+        return switch (travelType.trim().toLowerCase()) {
+            case "airline" -> "AERIEN";
+            case "maritime" -> "MARITIME";
+            default -> travelType.trim().toUpperCase();
+        };
+    }
+
+    private String blankToNull(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private AllocationRequestResponse toResponse(Client client, Allocation allocation) {
+        return AllocationRequestResponse.builder()
+                .codeDeclaration(allocation.getCodeDeclaration())
+                .cli(client.getCli())
+                .nin(allocation.getNin())
+                .nomBenefi(allocation.getNomBenefi())
+                .prenom(allocation.getPrenom())
+                .communeNaissanceBenf(allocation.getCommuneNaissanceBenf())
+                .dateNaissanceBenf(allocation.getDateNaissanceBenf())
+                .numPasseport(allocation.getNumPasseport())
+                .delivPassp(allocation.getDelivPassp())
+                .dExpPassp(allocation.getDExpPassp())
+                .dateAllez(allocation.getDateAllez())
+                .dateRetour(allocation.getDateRetour())
+                .codePays(allocation.getCodePays())
+                .nomPays(allocation.getNomPays())
+                .codeMonnaie(allocation.getCodeMonnaie())
+                .cdMoyenTrans(allocation.getCdMoyenTrans())
+                .moyenTrans(allocation.getMoyenTrans())
+                .codePostFrontalier(allocation.getCodePostFrontalier())
+                .designationPostFr(allocation.getDesignationPostFr())
+                .montantTotal(allocation.getMontantTotal())
+                .etat(allocation.getEtat())
+                .statu(allocation.getStatu())
+                .dateSaisie(allocation.getDateSaisie())
+                .observation(allocation.getObservation())
+                .passportMainPagePath(allocation.getPassportMainPagePath())
+                .passportVisaPagePath(allocation.getPassportVisaPagePath())
+                .passportNeantPagePath(allocation.getPassportNeantPagePath())
+                .ticketCopyPath(allocation.getTicketCopyPath())
+                .build();
+    }
+}

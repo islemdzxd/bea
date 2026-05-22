@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, BadgeCheck, ChartCandlestick, TrendingUp, Wallet } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, BadgeCheck } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,11 +30,18 @@ export function StocksWorkflow() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (!form.accountId && state.accounts[0]?.id) {
+      setForm((prev) => ({ ...prev, accountId: state.accounts[0].id }));
+    }
+  }, [form.accountId, state.accounts]);
+
   const selectedAccount = state.accounts.find((account) => account.id === form.accountId) ?? state.accounts[0];
   const selectedStock = state.marketStocks.find((stock) => stock.symbol === form.symbol) ?? state.marketStocks[0];
   const quantity = Number(form.quantity || 0);
   const estimatedTotal = useMemo(() => Number((quantity * (selectedStock?.price ?? 0)).toFixed(2)), [quantity, selectedStock?.price]);
   const currentHolding = state.holdings.find((holding) => holding.symbol === form.symbol);
+  const orderActionLabel = form.side === 'buy' ? 'Buy' : 'Sell';
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
@@ -43,33 +50,35 @@ export function StocksWorkflow() {
     setMessage('');
   };
 
-  const executeOrder = () => {
+  const executeOrder = async () => {
     if (!form.accountId || !form.symbol || !quantity) {
       setError('Select an account, stock, and quantity before placing the order.');
       return;
     }
 
     setSubmitting(true);
-    const result = submitStockOrder({
-      accountId: form.accountId,
-      symbol: form.symbol,
-      name: selectedStock?.name ?? form.symbol,
-      side: form.side,
-      quantity,
-      price: selectedStock?.price ?? 0,
-    });
+    try {
+      const result = await submitStockOrder({
+        accountId: form.accountId,
+        symbol: form.symbol,
+        name: selectedStock?.name ?? form.symbol,
+        side: form.side,
+        quantity,
+        price: selectedStock?.price ?? 0,
+      });
 
-    if (!result.ok) {
-      setError(result.error || 'Stock order failed.');
-      setMessage('');
+      if (!result.ok) {
+        setError(result.error || 'Stock order failed.');
+        setMessage('');
+        return;
+      }
+
+      setMessage(`${form.side === 'buy' ? 'Buy' : 'Sell'} order executed successfully. Reference ${result.order?.reference}.`);
+      setError('');
+      setForm((prev) => ({ ...prev, quantity: '' }));
+    } finally {
       setSubmitting(false);
-      return;
     }
-
-    setMessage(`${form.side === 'buy' ? 'Buy' : 'Sell'} order executed successfully. Reference ${result.order?.reference}.`);
-    setError('');
-    setForm((prev) => ({ ...prev, quantity: '' }));
-    setSubmitting(false);
   };
 
   return (
@@ -87,9 +96,9 @@ export function StocksWorkflow() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Settlement account</label>
+                <label htmlFor="stock-account" className="mb-2 block text-sm font-medium text-foreground">Settlement account</label>
                 <Select value={form.accountId} onValueChange={(value) => setForm((prev) => ({ ...prev, accountId: value }))}>
-                  <SelectTrigger className="w-full rounded-xl bg-background"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="stock-account" className="w-full rounded-xl bg-background"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {state.accounts.map((account) => (
                       <SelectItem key={account.id} value={account.id}>{account.label} • {account.balance.toLocaleString()} {account.currency}</SelectItem>
@@ -98,9 +107,9 @@ export function StocksWorkflow() {
                 </Select>
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Stock</label>
+                <label htmlFor="stock-symbol" className="mb-2 block text-sm font-medium text-foreground">Stock</label>
                 <Select value={form.symbol} onValueChange={(value) => setForm((prev) => ({ ...prev, symbol: value }))}>
-                  <SelectTrigger className="w-full rounded-xl bg-background"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="stock-symbol" className="w-full rounded-xl bg-background"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {state.marketStocks.map((stock) => (
                       <SelectItem key={stock.symbol} value={stock.symbol}>{stock.symbol} • {stock.name}</SelectItem>
@@ -112,11 +121,11 @@ export function StocksWorkflow() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Quantity</label>
-                <Input name="quantity" type="number" value={form.quantity} onChange={handleChange} placeholder="10" />
+                <label htmlFor="stock-quantity" className="mb-2 block text-sm font-medium text-foreground">Quantity</label>
+                <Input id="stock-quantity" name="quantity" type="number" value={form.quantity} onChange={handleChange} placeholder="10" />
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Action</label>
+                <p className="mb-2 block text-sm font-medium text-foreground">Action</p>
                 <div className="grid grid-cols-2 gap-3">
                   <Button type="button" variant={form.side === 'buy' ? 'default' : 'outline'} className="justify-center" onClick={() => setForm((prev) => ({ ...prev, side: 'buy' }))}><ArrowUp className="mr-2 h-4 w-4" />Buy</Button>
                   <Button type="button" variant={form.side === 'sell' ? 'default' : 'outline'} className="justify-center" onClick={() => setForm((prev) => ({ ...prev, side: 'sell' }))}><ArrowDown className="mr-2 h-4 w-4" />Sell</Button>
@@ -143,7 +152,7 @@ export function StocksWorkflow() {
             </div>
 
             <Button className="w-full bg-primary text-white hover:bg-primary/90" onClick={executeOrder} disabled={submitting}>
-              {submitting ? 'Placing order...' : `${form.side === 'buy' ? 'Buy' : 'Sell'} ${selectedStock?.symbol}`}
+              {submitting ? 'Placing order...' : `${orderActionLabel} ${selectedStock?.symbol}`}
             </Button>
           </CardContent>
         </Card>

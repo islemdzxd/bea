@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, Clock3, UploadCloud } from 'lucide-react';
+import { AlertCircle, CheckCircle2, UploadCloud } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,9 +36,9 @@ export function CreditWorkflow() {
     durationUnit: 'months',
     durationValue: '',
   });
-  const [salarySlipFileName, setSalarySlipFileName] = useState('');
-  const [workCertificateFileName, setWorkCertificateFileName] = useState('');
-  const [idDocumentFileName, setIdDocumentFileName] = useState('');
+  const [salarySlipFile, setSalarySlipFile] = useState<File | null>(null);
+  const [workCertificateFile, setWorkCertificateFile] = useState<File | null>(null);
+  const [idDocumentFile, setIdDocumentFile] = useState<File | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [decisionMessage, setDecisionMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -82,12 +82,18 @@ export function CreditWorkflow() {
       issues.push(`Monthly salary must be at least ${affordabilityRatio}x the estimated installment.`);
     }
 
-    if (!salarySlipFileName || !workCertificateFileName || !idDocumentFileName) {
+    if (!salarySlipFile || !workCertificateFile || !idDocumentFile) {
       issues.push('All supporting documents must be uploaded.');
     }
 
     return issues;
-  }, [durationMonths, estimatedMonthlyPayment, form.creditType, idDocumentFileName, monthlySalary, propertyValue, requestedAmount, salarySlipFileName, workCertificateFileName]);
+  }, [durationMonths, estimatedMonthlyPayment, form.creditType, idDocumentFile, monthlySalary, propertyValue, requestedAmount, salarySlipFile, workCertificateFile]);
+
+  const creditStatusClass = (status: 'approved' | 'rejected' | 'pending') => {
+    if (status === 'approved') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (status === 'rejected') return 'bg-red-50 text-red-700 border-red-200';
+    return 'bg-yellow-50 text-yellow-700 border-yellow-200';
+  };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = event.target;
@@ -104,7 +110,7 @@ export function CreditWorkflow() {
     return errors;
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     const errors = validateFields();
     setFieldErrors(errors);
@@ -117,16 +123,19 @@ export function CreditWorkflow() {
     setSubmitting(true);
 
     try {
-      const request = submitCreditRequest({
+      const request = await submitCreditRequest({
         creditType: form.creditType,
         requestedAmount,
         propertyValue: form.creditType === 'immobilier' ? propertyValue : undefined,
         monthlySalary,
         workStatus: form.workStatus,
         durationMonths,
-        salarySlipFileName,
-        workCertificateFileName,
-        idDocumentFileName,
+        salarySlipFileName: salarySlipFile?.name || '',
+        workCertificateFileName: workCertificateFile?.name || '',
+        idDocumentFileName: idDocumentFile?.name || '',
+        salarySlipFile,
+        workCertificateFile,
+        idDocumentFile,
         businessDecision,
         estimatedMonthlyPayment,
         decisionReason: businessIssues.join(' '),
@@ -147,9 +156,11 @@ export function CreditWorkflow() {
         durationUnit: 'months',
         durationValue: '',
       });
-      setSalarySlipFileName('');
-      setWorkCertificateFileName('');
-      setIdDocumentFileName('');
+      setSalarySlipFile(null);
+      setWorkCertificateFile(null);
+      setIdDocumentFile(null);
+    } catch (error) {
+      setDecisionMessage(error instanceof Error ? error.message : 'Failed to submit credit request.');
     } finally {
       setSubmitting(false);
     }
@@ -173,9 +184,9 @@ export function CreditWorkflow() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Credit type</label>
+                  <label htmlFor="credit-type" className="mb-2 block text-sm font-medium text-foreground">Credit type</label>
                   <Select value={form.creditType} onValueChange={(value: 'immobilier' | 'auto' | 'consommation') => setForm((prev) => ({ ...prev, creditType: value }))}>
-                    <SelectTrigger className="w-full rounded-xl bg-background"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="credit-type" className="w-full rounded-xl bg-background"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="immobilier">Immobilier</SelectItem>
                       <SelectItem value="auto">Auto</SelectItem>
@@ -184,29 +195,29 @@ export function CreditWorkflow() {
                   </Select>
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Requested amount</label>
-                  <Input name="requestedAmount" type="number" value={form.requestedAmount} onChange={handleChange} className={fieldErrors.requestedAmount ? 'border-red-500' : ''} placeholder="500000" />
+                  <label htmlFor="credit-requested-amount" className="mb-2 block text-sm font-medium text-foreground">Requested amount</label>
+                  <Input id="credit-requested-amount" name="requestedAmount" type="number" value={form.requestedAmount} onChange={handleChange} className={fieldErrors.requestedAmount ? 'border-red-500' : ''} placeholder="500000" />
                   {fieldErrors.requestedAmount && <p className="mt-1 text-xs text-red-500">{fieldErrors.requestedAmount}</p>}
                 </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Property value {form.creditType === 'immobilier' ? '*' : '(if immobilier)'}</label>
-                  <Input name="propertyValue" type="number" value={form.propertyValue} onChange={handleChange} placeholder="3500000" className={form.creditType === 'immobilier' && !form.propertyValue ? 'border-red-500' : ''} />
+                  <label htmlFor="credit-property-value" className="mb-2 block text-sm font-medium text-foreground">Property value {form.creditType === 'immobilier' ? '*' : '(if immobilier)'}</label>
+                  <Input id="credit-property-value" name="propertyValue" type="number" value={form.propertyValue} onChange={handleChange} placeholder="3500000" className={form.creditType === 'immobilier' && !form.propertyValue ? 'border-red-500' : ''} />
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Monthly salary</label>
-                  <Input name="monthlySalary" type="number" value={form.monthlySalary} onChange={handleChange} className={fieldErrors.monthlySalary ? 'border-red-500' : ''} placeholder="180000" />
+                  <label htmlFor="credit-monthly-salary" className="mb-2 block text-sm font-medium text-foreground">Monthly salary</label>
+                  <Input id="credit-monthly-salary" name="monthlySalary" type="number" value={form.monthlySalary} onChange={handleChange} className={fieldErrors.monthlySalary ? 'border-red-500' : ''} placeholder="180000" />
                   {fieldErrors.monthlySalary && <p className="mt-1 text-xs text-red-500">{fieldErrors.monthlySalary}</p>}
                 </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Work status</label>
+                  <label htmlFor="credit-work-status" className="mb-2 block text-sm font-medium text-foreground">Work status</label>
                   <Select value={form.workStatus} onValueChange={(value: CreditFormState['workStatus']) => setForm((prev) => ({ ...prev, workStatus: value }))}>
-                    <SelectTrigger className="w-full rounded-xl bg-background"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="credit-work-status" className="w-full rounded-xl bg-background"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="employed">Employed</SelectItem>
                       <SelectItem value="self-employed">Self-employed</SelectItem>
@@ -216,11 +227,11 @@ export function CreditWorkflow() {
                   </Select>
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Duration</label>
+                  <label htmlFor="credit-duration-value" className="mb-2 block text-sm font-medium text-foreground">Duration</label>
                   <div className="flex gap-3">
-                    <Input name="durationValue" type="number" value={form.durationValue} onChange={handleChange} className={fieldErrors.durationValue ? 'border-red-500 flex-1' : 'flex-1'} placeholder="24" />
+                    <Input id="credit-duration-value" name="durationValue" type="number" value={form.durationValue} onChange={handleChange} className={fieldErrors.durationValue ? 'border-red-500 flex-1' : 'flex-1'} placeholder="24" />
                     <Select value={form.durationUnit} onValueChange={(value: 'months' | 'years') => setForm((prev) => ({ ...prev, durationUnit: value }))}>
-                      <SelectTrigger className="w-28 rounded-xl bg-background"><SelectValue /></SelectTrigger>
+                      <SelectTrigger id="credit-duration-unit" className="w-28 rounded-xl bg-background"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="months">Months</SelectItem>
                         <SelectItem value="years">Years</SelectItem>
@@ -251,20 +262,20 @@ export function CreditWorkflow() {
               <div className="grid gap-4 md:grid-cols-3">
                 <label className="flex flex-col gap-2 rounded-2xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
                   <span className="font-medium text-foreground">Salary slips</span>
-                  <span>{salarySlipFileName || 'Upload file'}</span>
-                  <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setSalarySlipFileName(event.target.files?.[0]?.name || '')} />
+                  <span>{salarySlipFile?.name || 'Upload file'}</span>
+                  <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setSalarySlipFile(event.target.files?.[0] || null)} />
                   <span className="inline-flex items-center gap-2 text-primary"><UploadCloud className="h-4 w-4" />Browse</span>
                 </label>
                 <label className="flex flex-col gap-2 rounded-2xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
                   <span className="font-medium text-foreground">Work certificate</span>
-                  <span>{workCertificateFileName || 'Upload file'}</span>
-                  <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setWorkCertificateFileName(event.target.files?.[0]?.name || '')} />
+                  <span>{workCertificateFile?.name || 'Upload file'}</span>
+                  <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setWorkCertificateFile(event.target.files?.[0] || null)} />
                   <span className="inline-flex items-center gap-2 text-primary"><UploadCloud className="h-4 w-4" />Browse</span>
                 </label>
                 <label className="flex flex-col gap-2 rounded-2xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
                   <span className="font-medium text-foreground">ID document</span>
-                  <span>{idDocumentFileName || 'Upload file'}</span>
-                  <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setIdDocumentFileName(event.target.files?.[0]?.name || '')} />
+                  <span>{idDocumentFile?.name || 'Upload file'}</span>
+                  <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setIdDocumentFile(event.target.files?.[0] || null)} />
                   <span className="inline-flex items-center gap-2 text-primary"><UploadCloud className="h-4 w-4" />Browse</span>
                 </label>
               </div>
@@ -290,7 +301,7 @@ export function CreditWorkflow() {
                       <p className="font-semibold text-foreground">{request.creditType}</p>
                       <p className="text-xs text-muted-foreground">{formatCurrency(request.requestedAmount)} DZD • {request.durationMonths} months</p>
                     </div>
-                    <Badge className={request.status === 'approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : request.status === 'rejected' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}>{request.status}</Badge>
+                    <Badge className={creditStatusClass(request.status)}>{request.status}</Badge>
                   </div>
                   {request.decisionReason && <p className="mt-2 text-sm text-muted-foreground">{request.decisionReason}</p>}
                   <p className="mt-2 text-xs text-muted-foreground">Submitted {new Date(request.submittedAt).toLocaleString()}</p>

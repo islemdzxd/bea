@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, BadgeCheck } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -46,6 +46,12 @@ export function TransferWorkflow() {
   const [submitMessage, setSubmitMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (!form.debitAccountId && state.accounts[0]?.id) {
+      setForm((prev) => ({ ...prev, debitAccountId: state.accounts[0].id }));
+    }
+  }, [form.debitAccountId, state.accounts]);
+
   const selectedAccount = state.accounts.find((account) => account.id === form.debitAccountId) ?? state.accounts[0];
   const transferAmount = Number(form.amount || 0);
 
@@ -87,7 +93,7 @@ export function TransferWorkflow() {
     return errors;
   };
 
-  const openConfirmation = (event: React.FormEvent) => {
+  const openConfirmation = (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     const errors = validateFields();
     setFieldErrors(errors);
@@ -105,39 +111,40 @@ export function TransferWorkflow() {
     setConfirmationOpen(true);
   };
 
-  const confirmTransfer = () => {
+  const confirmTransfer = async () => {
     setSubmitting(true);
-    const result = submitTransferOrder({
-      debitAccountId: form.debitAccountId,
-      beneficiaryLastName: form.beneficiaryLastName.trim(),
-      beneficiaryFirstName: form.beneficiaryFirstName.trim(),
-      address: form.address.trim(),
-      rib: ribNormalized,
-      amount: transferAmount,
-      reason: form.reason.trim() || undefined,
-      signature: form.signature.trim(),
-    });
+    try {
+      const result = await submitTransferOrder({
+        debitAccountId: form.debitAccountId,
+        beneficiaryLastName: form.beneficiaryLastName.trim(),
+        beneficiaryFirstName: form.beneficiaryFirstName.trim(),
+        address: form.address.trim(),
+        rib: ribNormalized,
+        amount: transferAmount,
+        reason: form.reason.trim() || undefined,
+        signature: form.signature.trim(),
+      });
 
-    if (!result.ok) {
-      setSubmitMessage(result.error || 'Transfer failed.');
+      if (!result.ok) {
+        setSubmitMessage(result.error || 'Transfer failed.');
+        return;
+      }
+
+      setSubmitMessage(`Transfer completed successfully. Reference ${result.order?.reference}.`);
+      setForm({
+        debitAccountId: state.accounts[0]?.id ?? '',
+        beneficiaryLastName: '',
+        beneficiaryFirstName: '',
+        address: '',
+        rib: '',
+        amount: '',
+        reason: '',
+        signature: '',
+      });
+    } finally {
       setConfirmationOpen(false);
       setSubmitting(false);
-      return;
     }
-
-    setConfirmationOpen(false);
-    setSubmitting(false);
-    setSubmitMessage(`Transfer completed successfully. Reference ${result.order?.reference}.`);
-    setForm({
-      debitAccountId: state.accounts[0]?.id ?? '',
-      beneficiaryLastName: '',
-      beneficiaryFirstName: '',
-      address: '',
-      rib: '',
-      amount: '',
-      reason: '',
-      signature: '',
-    });
   };
 
   return (

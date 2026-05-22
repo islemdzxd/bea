@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import { addDays, differenceInCalendarDays, differenceInYears, isAfter, isBefore, parseISO } from 'date-fns';
-import { AlertCircle, CheckCircle2, Clock3, ShieldAlert, UploadCloud } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { addDays, differenceInYears, isAfter, isBefore, parseISO } from 'date-fns';
+import { CheckCircle2, ShieldAlert, UploadCloud } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { useBanking } from '@/features/banking/banking-provider';
+import { getJson } from '@/lib/bea-api';
 
 type FieldErrors = Partial<Record<string, string>>;
 
@@ -29,6 +30,15 @@ interface AllocationFormState {
   amount: string;
   travelReason: string;
 }
+
+type AllocationContextResponse = {
+  cli: string;
+  nin?: string | null;
+  nom: string;
+  prenom: string;
+  dateNaissance?: string | null;
+  lieuNaissance?: string | null;
+};
 
 function normalizeDigits(value: string) {
   return value.replace(/\D/g, '');
@@ -57,6 +67,94 @@ function statusTone(status: 'pending' | 'approved' | 'rejected') {
   }
 }
 
+function appendAllocationTravelIssues(issues: string[], options: {
+  dateOfBirth: string;
+  departureDate: string;
+  returnDate: string;
+  passportExpiryDate: string;
+}) {
+  if (options.dateOfBirth && options.departureDate && calculateAgeAtDeparture(options.dateOfBirth, options.departureDate) < 12) {
+    issues.push('Applicants must be at least 12 years old on the departure date.');
+  }
+
+  if (options.departureDate) {
+    const departure = parseISO(options.departureDate);
+    const minDate = addDays(new Date(), 5);
+    if (isBefore(departure, minDate)) {
+      issues.push('Departure date must be at least 5 calendar days from today.');
+    }
+  }
+
+  if (options.departureDate && options.returnDate && !isAfter(parseISO(options.returnDate), parseISO(options.departureDate))) {
+    issues.push('Return date must be after departure date.');
+  }
+
+  if (options.passportExpiryDate && options.returnDate && isBefore(parseISO(options.passportExpiryDate), parseISO(options.returnDate))) {
+    issues.push('Passport must remain valid throughout the trip.');
+  }
+}
+
+function appendAllocationAmountIssues(issues: string[], options: { allocationLimit: number; amount: string; currency: AllocationFormState['currency'] }) {
+  if (options.allocationLimit > 0 && Number(options.amount || 0) > options.allocationLimit) {
+    issues.push(`Allocation amount cannot exceed ${options.allocationLimit} ${options.currency}.`);
+  }
+
+  if (Number(options.amount || 0) % 50 !== 0) {
+    issues.push('Allocation amount must be a multiple of 50.');
+  }
+}
+
+function appendAllocationDocumentIssues(issues: string[], options: {
+  yearlyUsageCount: number;
+  passportFile: File | null;
+  passportVisaFile: File | null;
+  passportNeantFile: File | null;
+  ticketFile: File | null;
+}) {
+  if (options.yearlyUsageCount > 0) {
+    issues.push('This NIN has already used the tourist allocation for the current year.');
+  }
+
+  if (!options.passportFile) {
+    issues.push('Passport main page is required.');
+  }
+
+  if (!options.passportVisaFile) {
+    issues.push('Passport visa page is required.');
+  }
+
+  if (!options.passportNeantFile) {
+    issues.push('Passport "Néant" page is required.');
+  }
+
+  if (!options.ticketFile) {
+    issues.push('Travel ticket is required.');
+  }
+}
+
+function buildAllocationBusinessIssues(options: {
+  dateOfBirth: string;
+  departureDate: string;
+  returnDate: string;
+  passportExpiryDate: string;
+  allocationLimit: number;
+  amount: string;
+  currency: AllocationFormState['currency'];
+  yearlyUsageCount: number;
+  passportFile: File | null;
+  passportVisaFile: File | null;
+  passportNeantFile: File | null;
+  ticketFile: File | null;
+}) {
+  const issues: string[] = [];
+
+  appendAllocationTravelIssues(issues, options);
+  appendAllocationAmountIssues(issues, options);
+  appendAllocationDocumentIssues(issues, options);
+
+  return issues;
+}
+
 export function AllocationWorkflow() {
   const { state, submitAllocationRequest } = useBanking();
   const [form, setForm] = useState<AllocationFormState>({
@@ -75,11 +173,41 @@ export function AllocationWorkflow() {
     amount: '',
     travelReason: '',
   });
-  const [passportFileName, setPassportFileName] = useState('');
-  const [ticketFileName, setTicketFileName] = useState('');
+  const [passportFile, setPassportFile] = useState<File | null>(null);
+  const [passportVisaFile, setPassportVisaFile] = useState<File | null>(null);
+  const [passportNeantFile, setPassportNeantFile] = useState<File | null>(null);
+  const [ticketFile, setTicketFile] = useState<File | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitMessage, setSubmitMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadContext = async () => {
+      try {
+        const context = await getJson<AllocationContextResponse>('/api/allocation/me/context');
+        if (cancelled) return;
+
+        setForm((prev) => ({
+          ...prev,
+          nin: prev.nin || context.nin || '',
+          lastName: prev.lastName || context.nom || '',
+          firstName: prev.firstName || context.prenom || '',
+          dateOfBirth: prev.dateOfBirth || context.dateNaissance || '',
+          placeOfBirth: prev.placeOfBirth || context.lieuNaissance || '',
+        }));
+      } catch {
+        // Keep manual entry when the backend context is unavailable.
+      }
+    };
+
+    loadContext();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const ageAtDeparture = calculateAgeAtDeparture(form.dateOfBirth, form.departureDate);
   const allocationLimit = ageAtDeparture ? requiredAllocationLimit(ageAtDeparture) : 0;
@@ -88,57 +216,24 @@ export function AllocationWorkflow() {
     (request) => request.nin === normalizeDigits(form.nin) && new Date(request.submittedAt).getFullYear() === currentYear,
   );
 
-  const computedBusinessRules = useMemo(() => {
-    const issues: string[] = [];
-
-    if (form.dateOfBirth && form.departureDate) {
-      if (calculateAgeAtDeparture(form.dateOfBirth, form.departureDate) < 12) {
-        issues.push('Applicants must be at least 12 years old on the departure date.');
-      }
-    }
-
-    if (form.departureDate) {
-      const departure = parseISO(form.departureDate);
-      const minDate = addDays(new Date(), 5);
-      if (isBefore(departure, minDate)) {
-        issues.push('Departure date must be at least 5 calendar days from today.');
-      }
-    }
-
-    if (form.departureDate && form.returnDate) {
-      if (!isAfter(parseISO(form.returnDate), parseISO(form.departureDate))) {
-        issues.push('Return date must be after departure date.');
-      }
-    }
-
-    if (form.passportExpiryDate && form.returnDate) {
-      if (isBefore(parseISO(form.passportExpiryDate), parseISO(form.returnDate))) {
-        issues.push('Passport must remain valid throughout the trip.');
-      }
-    }
-
-    if (allocationLimit > 0 && Number(form.amount || 0) > allocationLimit) {
-      issues.push(`Allocation amount cannot exceed ${allocationLimit} ${form.currency}.`);
-    }
-
-    if (Number(form.amount || 0) % 50 !== 0) {
-      issues.push('Allocation amount must be a multiple of 50.');
-    }
-
-    if (yearlyUsage.length > 0) {
-      issues.push('This NIN has already used the tourist allocation for the current year.');
-    }
-
-    if (!passportFileName) {
-      issues.push('Passport main page is required.');
-    }
-
-    if (!ticketFileName) {
-      issues.push('Travel ticket is required.');
-    }
-
-    return issues;
-  }, [allocationLimit, currentYear, form.amount, form.currency, form.dateOfBirth, form.departureDate, form.passportExpiryDate, form.returnDate, passportFileName, ticketFileName, yearlyUsage.length]);
+  const computedBusinessRules = useMemo(
+    () =>
+      buildAllocationBusinessIssues({
+        dateOfBirth: form.dateOfBirth,
+        departureDate: form.departureDate,
+        returnDate: form.returnDate,
+        passportExpiryDate: form.passportExpiryDate,
+        allocationLimit,
+        amount: form.amount,
+        currency: form.currency,
+        yearlyUsageCount: yearlyUsage.length,
+        passportFile,
+        passportVisaFile,
+        passportNeantFile,
+        ticketFile,
+      }),
+    [allocationLimit, form.amount, form.currency, form.dateOfBirth, form.departureDate, form.passportExpiryDate, form.returnDate, passportFile, passportVisaFile, passportNeantFile, ticketFile, yearlyUsage.length],
+  );
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = event.target;
@@ -167,7 +262,7 @@ export function AllocationWorkflow() {
     return errors;
   };
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     const errors = validateFields();
     setFieldErrors(errors);
@@ -176,11 +271,10 @@ export function AllocationWorkflow() {
       return;
     }
 
-    const businessDecision = computedBusinessRules.length > 0 ? 'rejected' : 'pending';
     setSubmitting(true);
 
     try {
-      const request = submitAllocationRequest({
+      const request = await submitAllocationRequest({
         nin: normalizeDigits(form.nin),
         lastName: form.lastName.trim(),
         firstName: form.firstName.trim(),
@@ -194,18 +288,18 @@ export function AllocationWorkflow() {
         destinationCountry: form.destinationCountry.trim(),
         currency: form.currency,
         amount: Number(form.amount),
-        passportFileName,
-        ticketFileName,
+        passportFileName: passportFile?.name || '',
+        ticketFileName: ticketFile?.name || '',
+        passportFile,
+        passportVisaFile,
+        passportNeantFile,
+        ticketFile,
         ageAtDeparture,
-        businessDecision,
+        businessDecision: computedBusinessRules.length > 0 ? 'rejected' : 'pending',
         decisionReason: computedBusinessRules.join(' '),
       });
 
-      setSubmitMessage(
-        request.status === 'rejected'
-          ? 'Request recorded as rejected after eligibility checks. Review the reasons below.'
-          : 'Request submitted successfully and is waiting for review.',
-      );
+      setSubmitMessage(request.status === 'rejected' ? 'Request recorded as rejected after eligibility checks. Review the reasons below.' : 'Request submitted successfully and is waiting for review.');
       setForm({
         nin: '',
         lastName: '',
@@ -222,8 +316,12 @@ export function AllocationWorkflow() {
         amount: '',
         travelReason: '',
       });
-      setPassportFileName('');
-      setTicketFileName('');
+      setPassportFile(null);
+      setPassportVisaFile(null);
+      setPassportNeantFile(null);
+      setTicketFile(null);
+    } catch (error) {
+      setSubmitMessage(error instanceof Error ? error.message : 'Failed to submit allocation request.');
     } finally {
       setSubmitting(false);
     }
@@ -248,53 +346,53 @@ export function AllocationWorkflow() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">NIN</label>
-                  <Input name="nin" value={form.nin} onChange={handleChange} placeholder="18 digits" className={fieldErrors.nin ? 'border-red-500' : ''} />
+                  <label htmlFor="allocation-nin" className="mb-2 block text-sm font-medium text-foreground">NIN</label>
+                  <Input id="allocation-nin" name="nin" value={form.nin} onChange={handleChange} placeholder="18 digits" className={fieldErrors.nin ? 'border-red-500' : ''} />
                   {fieldErrors.nin && <p className="mt-1 text-xs text-red-500">{fieldErrors.nin}</p>}
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Passport number</label>
-                  <Input name="passportNumber" value={form.passportNumber} onChange={handleChange} placeholder="P12345678" className={fieldErrors.passportNumber ? 'border-red-500' : ''} />
+                  <label htmlFor="allocation-passport-number" className="mb-2 block text-sm font-medium text-foreground">Passport number</label>
+                  <Input id="allocation-passport-number" name="passportNumber" value={form.passportNumber} onChange={handleChange} placeholder="P12345678" className={fieldErrors.passportNumber ? 'border-red-500' : ''} />
                   {fieldErrors.passportNumber && <p className="mt-1 text-xs text-red-500">{fieldErrors.passportNumber}</p>}
                 </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Last name</label>
-                  <Input name="lastName" value={form.lastName} onChange={handleChange} className={fieldErrors.lastName ? 'border-red-500' : ''} />
+                  <label htmlFor="allocation-last-name" className="mb-2 block text-sm font-medium text-foreground">Last name</label>
+                  <Input id="allocation-last-name" name="lastName" value={form.lastName} onChange={handleChange} className={fieldErrors.lastName ? 'border-red-500' : ''} />
                   {fieldErrors.lastName && <p className="mt-1 text-xs text-red-500">{fieldErrors.lastName}</p>}
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">First name</label>
-                  <Input name="firstName" value={form.firstName} onChange={handleChange} className={fieldErrors.firstName ? 'border-red-500' : ''} />
+                  <label htmlFor="allocation-first-name" className="mb-2 block text-sm font-medium text-foreground">First name</label>
+                  <Input id="allocation-first-name" name="firstName" value={form.firstName} onChange={handleChange} className={fieldErrors.firstName ? 'border-red-500' : ''} />
                   {fieldErrors.firstName && <p className="mt-1 text-xs text-red-500">{fieldErrors.firstName}</p>}
                 </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Date of birth</label>
-                  <Input type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={handleChange} className={fieldErrors.dateOfBirth ? 'border-red-500' : ''} />
+                  <label htmlFor="allocation-date-of-birth" className="mb-2 block text-sm font-medium text-foreground">Date of birth</label>
+                  <Input id="allocation-date-of-birth" type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={handleChange} className={fieldErrors.dateOfBirth ? 'border-red-500' : ''} />
                   {fieldErrors.dateOfBirth && <p className="mt-1 text-xs text-red-500">{fieldErrors.dateOfBirth}</p>}
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Place of birth</label>
-                  <Input name="placeOfBirth" value={form.placeOfBirth} onChange={handleChange} className={fieldErrors.placeOfBirth ? 'border-red-500' : ''} />
+                  <label htmlFor="allocation-place-of-birth" className="mb-2 block text-sm font-medium text-foreground">Place of birth</label>
+                  <Input id="allocation-place-of-birth" name="placeOfBirth" value={form.placeOfBirth} onChange={handleChange} className={fieldErrors.placeOfBirth ? 'border-red-500' : ''} />
                   {fieldErrors.placeOfBirth && <p className="mt-1 text-xs text-red-500">{fieldErrors.placeOfBirth}</p>}
                 </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Passport expiry date</label>
-                  <Input type="date" name="passportExpiryDate" value={form.passportExpiryDate} onChange={handleChange} className={fieldErrors.passportExpiryDate ? 'border-red-500' : ''} />
+                  <label htmlFor="allocation-passport-expiry" className="mb-2 block text-sm font-medium text-foreground">Passport expiry date</label>
+                  <Input id="allocation-passport-expiry" type="date" name="passportExpiryDate" value={form.passportExpiryDate} onChange={handleChange} className={fieldErrors.passportExpiryDate ? 'border-red-500' : ''} />
                   {fieldErrors.passportExpiryDate && <p className="mt-1 text-xs text-red-500">{fieldErrors.passportExpiryDate}</p>}
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Travel type</label>
+                  <label htmlFor="allocation-travel-type" className="mb-2 block text-sm font-medium text-foreground">Travel type</label>
                   <Select value={form.travelType} onValueChange={(value: 'airline' | 'maritime') => setForm((prev) => ({ ...prev, travelType: value }))}>
-                    <SelectTrigger className="w-full rounded-xl bg-background">
+                    <SelectTrigger id="allocation-travel-type" className="w-full rounded-xl bg-background">
                       <SelectValue placeholder="Choose travel type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -307,46 +405,65 @@ export function AllocationWorkflow() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Departure date</label>
-                  <Input type="date" name="departureDate" value={form.departureDate} onChange={handleChange} className={fieldErrors.departureDate ? 'border-red-500' : ''} />
+                  <label htmlFor="allocation-departure-date" className="mb-2 block text-sm font-medium text-foreground">Departure date</label>
+                  <Input id="allocation-departure-date" type="date" name="departureDate" value={form.departureDate} onChange={handleChange} className={fieldErrors.departureDate ? 'border-red-500' : ''} />
                   {fieldErrors.departureDate && <p className="mt-1 text-xs text-red-500">{fieldErrors.departureDate}</p>}
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Return date</label>
-                  <Input type="date" name="returnDate" value={form.returnDate} onChange={handleChange} className={fieldErrors.returnDate ? 'border-red-500' : ''} />
+                  <label htmlFor="allocation-return-date" className="mb-2 block text-sm font-medium text-foreground">Return date</label>
+                  <Input id="allocation-return-date" type="date" name="returnDate" value={form.returnDate} onChange={handleChange} className={fieldErrors.returnDate ? 'border-red-500' : ''} />
                   {fieldErrors.returnDate && <p className="mt-1 text-xs text-red-500">{fieldErrors.returnDate}</p>}
                 </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Destination country</label>
-                  <Input name="destinationCountry" value={form.destinationCountry} onChange={handleChange} className={fieldErrors.destinationCountry ? 'border-red-500' : ''} />
+                  <label htmlFor="allocation-destination-country" className="mb-2 block text-sm font-medium text-foreground">Destination country</label>
+                  <Input id="allocation-destination-country" name="destinationCountry" value={form.destinationCountry} onChange={handleChange} className={fieldErrors.destinationCountry ? 'border-red-500' : ''} />
                   {fieldErrors.destinationCountry && <p className="mt-1 text-xs text-red-500">{fieldErrors.destinationCountry}</p>}
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Passport main page</label>
+                  <label htmlFor="allocation-passport-main" className="mb-2 block text-sm font-medium text-foreground">Passport main page</label>
                   <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-                    <span>{passportFileName || 'Upload passport page'}</span>
+                    <span>{passportFile?.name || 'Upload passport page'}</span>
                     <span className="inline-flex items-center gap-2 text-primary"><UploadCloud className="h-4 w-4" />Browse</span>
-                    <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setPassportFileName(event.target.files?.[0]?.name || '')} />
+                    <input id="allocation-passport-main" type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setPassportFile(event.target.files?.[0] || null)} />
                   </label>
                 </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Travel ticket</label>
+                  <label htmlFor="allocation-passport-visa" className="mb-2 block text-sm font-medium text-foreground">Passport visa page</label>
                   <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-                    <span>{ticketFileName || 'Upload flight or maritime ticket'}</span>
+                    <span>{passportVisaFile?.name || 'Upload visa page'}</span>
                     <span className="inline-flex items-center gap-2 text-primary"><UploadCloud className="h-4 w-4" />Browse</span>
-                    <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setTicketFileName(event.target.files?.[0]?.name || '')} />
+                    <input id="allocation-passport-visa" type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setPassportVisaFile(event.target.files?.[0] || null)} />
                   </label>
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-foreground">Allocation amount</label>
+                  <label htmlFor="allocation-passport-neant" className="mb-2 block text-sm font-medium text-foreground">Passport "Néant" page</label>
+                  <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+                    <span>{passportNeantFile?.name || 'Upload Néant page'}</span>
+                    <span className="inline-flex items-center gap-2 text-primary"><UploadCloud className="h-4 w-4" />Browse</span>
+                    <input id="allocation-passport-neant" type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setPassportNeantFile(event.target.files?.[0] || null)} />
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label htmlFor="allocation-travel-ticket" className="mb-2 block text-sm font-medium text-foreground">Travel ticket</label>
+                  <label className="flex cursor-pointer items-center justify-between rounded-2xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+                    <span>{ticketFile?.name || 'Upload flight or maritime ticket'}</span>
+                    <span className="inline-flex items-center gap-2 text-primary"><UploadCloud className="h-4 w-4" />Browse</span>
+                    <input id="allocation-travel-ticket" type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={(event) => setTicketFile(event.target.files?.[0] || null)} />
+                  </label>
+                </div>
+                <div>
+                  <label htmlFor="allocation-amount" className="mb-2 block text-sm font-medium text-foreground">Allocation amount</label>
                   <div className="flex gap-3">
-                    <Input name="amount" type="number" value={form.amount} onChange={handleChange} className={fieldErrors.amount ? 'border-red-500 flex-1' : 'flex-1'} placeholder="750" />
+                    <Input id="allocation-amount" name="amount" type="number" value={form.amount} onChange={handleChange} className={fieldErrors.amount ? 'border-red-500 flex-1' : 'flex-1'} placeholder="750" />
                     <Select value={form.currency} onValueChange={(value: 'EUR' | 'USD') => setForm((prev) => ({ ...prev, currency: value }))}>
                       <SelectTrigger className="w-24 rounded-xl bg-background">
                         <SelectValue />
@@ -362,8 +479,8 @@ export function AllocationWorkflow() {
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-foreground">Reason for travel</label>
-                <Textarea name="travelReason" value={form.travelReason} onChange={handleChange} placeholder="Optional but useful for bank review" className="rounded-2xl" />
+                <label htmlFor="allocation-travel-reason" className="mb-2 block text-sm font-medium text-foreground">Reason for travel</label>
+                <Textarea id="allocation-travel-reason" name="travelReason" value={form.travelReason} onChange={handleChange} placeholder="Optional but useful for bank review" className="rounded-2xl" />
               </div>
 
               <div className="rounded-2xl border border-border/70 bg-white/70 p-4 text-sm text-foreground">

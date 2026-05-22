@@ -139,6 +139,21 @@ public class Allocation {
 	@Column(name = "email", length = 100)
 	private String email;
 
+	@Column(name = "commune_naissance_benf", length = 100)
+	private String communeNaissanceBenf;
+
+	@Column(name = "passport_main_page_path", length = 255)
+	private String passportMainPagePath;
+
+	@Column(name = "passport_visa_page_path", length = 255)
+	private String passportVisaPagePath;
+
+	@Column(name = "passport_neant_page_path", length = 255)
+	private String passportNeantPagePath;
+
+	@Column(name = "ticket_copy_path", length = 255)
+	private String ticketCopyPath;
+
 	@Column(name = "datesaisie")
 	private LocalDate dateSaisie;
 
