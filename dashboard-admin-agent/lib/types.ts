@@ -24,7 +24,9 @@ export interface RequestDocument {
   id: string;
   label: string;
   fileName: string;
+  contentType?: string;
   downloadUrl?: string;
+  url?: string;
 }
 
 export interface AuditEntry {

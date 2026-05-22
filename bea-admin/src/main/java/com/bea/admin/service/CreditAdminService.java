@@ -216,6 +216,7 @@ public class CreditAdminService {
                 .id(id)
                 .label(label)
                 .fileName(Paths.get(path).getFileName().toString())
+            .contentType(resolveMediaType(Paths.get(path).getFileName().toString()).toString())
                 .downloadUrl("/api/credits/" + numero + "/documents/" + id)
                 .build());
     }

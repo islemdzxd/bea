@@ -1,10 +1,12 @@
 package com.bea.client.dto.allocation;
 
+import com.bea.client.dto.DocumentDto;
 import lombok.Builder;
 import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @Builder
@@ -37,4 +39,5 @@ public class AllocationRequestResponse {
     private String passportVisaPagePath;
     private String passportNeantPagePath;
     private String ticketCopyPath;
+    private List<DocumentDto> documents;
 }

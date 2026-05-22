@@ -1,17 +1,24 @@
 const DEFAULT_ADMIN_API_BASE_URL = 'http://localhost:8080';
 const BROWSER_PROXY_PREFIX = '/api-admin';
 
+function isAbsoluteUrl(path: string) {
+  return /^https?:\/\//i.test(path);
+}
+
 export function getAdminApiBaseUrl() {
   if (process.env.NEXT_PUBLIC_ADMIN_API_BASE_URL) {
     return process.env.NEXT_PUBLIC_ADMIN_API_BASE_URL.replace(/\/$/, '');
   }
-  if (typeof window !== 'undefined') {
+  if (globalThis.window !== undefined) {
     return BROWSER_PROXY_PREFIX;
   }
   return DEFAULT_ADMIN_API_BASE_URL;
 }
 
 function buildUrl(path: string): string {
+  if (isAbsoluteUrl(path)) {
+    return path;
+  }
   const base = getAdminApiBaseUrl();
   if (base === BROWSER_PROXY_PREFIX) {
     return `${BROWSER_PROXY_PREFIX}${path.replace(/^\/api/, '')}`;
@@ -20,8 +27,8 @@ function buildUrl(path: string): string {
 }
 
 export function getAdminToken() {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('bea_admin_token');
+  if (globalThis.window === undefined) return null;
+  return globalThis.window.localStorage.getItem('bea_admin_token');
 }
 
 async function parseError(response: Response) {
@@ -82,7 +89,9 @@ export function adminPost<T>(path: string, body?: unknown) {
 
 export async function adminDownload(path: string) {
   const token = getAdminToken();
-  const downloadPath = path.startsWith('/api/')
+  const downloadPath = isAbsoluteUrl(path)
+    ? path
+    : path.startsWith('/api/')
     ? buildUrl(path)
     : `${getAdminApiBaseUrl()}${path}`;
 
@@ -102,4 +111,53 @@ export async function adminDownload(path: string) {
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank', 'noopener,noreferrer');
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export async function adminCreateBlobUrl(path: string) {
+  const token = getAdminToken();
+  const downloadPath = isAbsoluteUrl(path)
+    ? path
+    : path.startsWith('/api/')
+    ? buildUrl(path)
+    : `${getAdminApiBaseUrl()}${path}`;
+
+  let response: Response;
+  try {
+    response = await fetch(downloadPath, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    throw new Error('Impossible de charger le document (bea-admin indisponible).');
+  }
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
+export async function adminFetchBlob(path: string) {
+  const token = getAdminToken();
+  const downloadPath = isAbsoluteUrl(path)
+    ? path
+    : path.startsWith('/api/')
+    ? buildUrl(path)
+    : `${getAdminApiBaseUrl()}${path}`;
+
+  let response: Response;
+  try {
+    response = await fetch(downloadPath, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    throw new Error('Impossible de charger le document (bea-admin indisponible).');
+  }
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
+
+  return await response.blob();
 }

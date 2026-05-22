@@ -6,6 +6,14 @@ export type TravelType = 'airline' | 'maritime';
 export type AllocationCurrency = 'EUR' | 'USD';
 export type StockSide = 'buy' | 'sell';
 
+export interface RequestDocument {
+  id: string;
+  label: string;
+  fileName: string;
+  contentType?: string;
+  downloadUrl?: string;
+}
+
 export interface BankingAccount {
   id: string;
   label: string;
@@ -48,6 +56,7 @@ export interface AllocationRequest {
   amount: number;
   passportFileName: string;
   ticketFileName: string;
+  documents: RequestDocument[];
   status: RequestStatus;
   submittedAt: string;
   decisionReason?: string;
@@ -65,6 +74,7 @@ export interface CreditRequest {
   salarySlipFileName: string;
   workCertificateFileName: string;
   idDocumentFileName: string;
+  documents: RequestDocument[];
   status: RequestStatus;
   submittedAt: string;
   decisionReason?: string;

@@ -1,5 +1,6 @@
 package com.bea.client.service;
 
+import com.bea.client.dto.DocumentDto;
 import com.bea.client.dto.credit.CreditContextResponse;
 import com.bea.client.dto.credit.CreditRequestResponse;
 import com.bea.client.dto.credit.CreditSubmissionRequest;
@@ -7,11 +8,13 @@ import com.bea.client.model.Client;
 import com.bea.client.model.Credit;
 import com.bea.client.repository.CreditRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.file.Files;
@@ -29,6 +32,9 @@ public class CreditService {
     private static final String STATUS_REJECTED = "REJETE";
 
     private final CreditRepository creditRepository;
+
+    @Value("${bea.public-base-url:http://localhost:8081}")
+    private String publicBaseUrl;
 
     public CreditContextResponse getContext(Client client) {
         List<Credit> history = creditRepository.findByCodeUtilisateurOrderByDateOuvertureDossierDesc(client.getCli());
@@ -194,9 +200,11 @@ public class CreditService {
                 extension = originalFilename.substring(originalFilename.lastIndexOf('.'));
             }
 
-            Path target = folder.resolve(prefix + extension);
-            Files.write(target, file.getBytes());
-            return target.toString();
+                String fileName = prefix + extension;
+                Path target = folder.resolve(fileName);
+                Files.write(target, file.getBytes());
+                // return a web-friendly relative path (uploads/credit/<client>/<dossier>/<file>)
+                return String.join("/", "uploads", "credit", client.getCli(), dossier, fileName);
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to store uploaded file", exception);
         }
@@ -224,6 +232,53 @@ public class CreditService {
                 .salarySlipPath(credit.getSalarySlipPath())
                 .workCertificatePath(credit.getWorkCertificatePath())
                 .idDocumentPath(credit.getIdDocumentPath())
+                .documents(buildDocuments(credit))
                 .build();
+    }
+
+    private java.util.List<DocumentDto> buildDocuments(Credit credit) {
+        java.util.List<DocumentDto> documents = new ArrayList<>();
+        addDocument(documents, "id-document", "Pièce d'identité", credit.getIdDocumentPath());
+        addDocument(documents, "salary-slip", "Bulletin de salaire", credit.getSalarySlipPath());
+        addDocument(documents, "work-certificate", "Attestation de travail", credit.getWorkCertificatePath());
+        return documents;
+    }
+
+    private void addDocument(java.util.List<DocumentDto> documents, String id, String label, String path) {
+        if (!StringUtils.hasText(path)) {
+            return;
+        }
+
+        String fileName = Paths.get(path).getFileName().toString();
+        documents.add(DocumentDto.builder()
+                .id(id)
+                .label(label)
+                .fileName(fileName)
+                .contentType(resolveContentType(fileName))
+                .downloadUrl(buildPublicUrl(path))
+                .build());
+    }
+
+    private String buildPublicUrl(String path) {
+        String normalizedBase = publicBaseUrl.replaceAll("/$", "");
+        String normalizedPath = path.startsWith("/") ? path.substring(1) : path;
+        return normalizedBase + "/" + normalizedPath;
+    }
+
+    private String resolveContentType(String fileName) {
+        String lower = fileName.toLowerCase();
+        if (lower.endsWith(".pdf")) {
+            return "application/pdf";
+        }
+        if (lower.endsWith(".png")) {
+            return "image/png";
+        }
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+            return "image/jpeg";
+        }
+        if (lower.endsWith(".webp")) {
+            return "image/webp";
+        }
+        return "application/octet-stream";
     }
 }

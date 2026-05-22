@@ -113,6 +113,7 @@ type AllocationRequestResponse = {
   passportVisaPagePath?: string | null;
   passportNeantPagePath?: string | null;
   ticketCopyPath?: string | null;
+  documents?: RequestDocumentResponse[] | null;
 };
 
 type CreditContextResponse = {
@@ -149,6 +150,15 @@ type CreditRequestResponse = {
   salarySlipPath?: string | null;
   workCertificatePath?: string | null;
   idDocumentPath?: string | null;
+  documents?: RequestDocumentResponse[] | null;
+};
+
+type RequestDocumentResponse = {
+  id: string;
+  label: string;
+  fileName: string;
+  contentType?: string | null;
+  downloadUrl?: string | null;
 };
 
 type VirementContextResponse = {
@@ -286,6 +296,20 @@ function safeFileName(path?: string | null) {
   return path.split(/[/\\]/).pop() || '';
 }
 
+function mapRequestDocuments(
+  documents: RequestDocumentResponse[] | null | undefined,
+  fallback: RequestDocumentResponse[]
+) {
+  const source = documents && documents.length > 0 ? documents : fallback;
+  return source.map((document) => ({
+    id: document.id,
+    label: document.label,
+    fileName: document.fileName,
+    contentType: document.contentType ?? undefined,
+    downloadUrl: document.downloadUrl ?? undefined,
+  }));
+}
+
 function mapAccount(account: DashboardAccountResponse | VirementAccountResponse | OrdreBourseAccountResponse): BankingState['accounts'][number] {
   const balance = Number((account.soldeIndicatif ?? account.soldeComptable ?? 0));
 
@@ -343,6 +367,32 @@ function mapAllocation(response: AllocationRequestResponse): AllocationRequest {
     amount: Number(response.montantTotal ?? 0),
     passportFileName: safeFileName(response.passportMainPagePath),
     ticketFileName: safeFileName(response.ticketCopyPath),
+    documents: mapRequestDocuments(response.documents, [
+      {
+        id: 'passport-main',
+        label: 'Passeport (page principale)',
+        fileName: safeFileName(response.passportMainPagePath),
+        downloadUrl: response.passportMainPagePath ?? undefined,
+      },
+      {
+        id: 'passport-visa',
+        label: 'Passeport (visa / néant)',
+        fileName: safeFileName(response.passportVisaPagePath),
+        downloadUrl: response.passportVisaPagePath ?? undefined,
+      },
+      {
+        id: 'passport-neant',
+        label: 'Passeport (néant)',
+        fileName: safeFileName(response.passportNeantPagePath),
+        downloadUrl: response.passportNeantPagePath ?? undefined,
+      },
+      {
+        id: 'ticket',
+        label: 'Billet / réservation',
+        fileName: safeFileName(response.ticketCopyPath),
+        downloadUrl: response.ticketCopyPath ?? undefined,
+      },
+    ]),
     status: asRequestStatus(response.etat || response.statu),
     submittedAt: response.dateSaisie || new Date().toISOString(),
     decisionReason: response.observation || undefined,
@@ -362,6 +412,26 @@ function mapCredit(response: CreditRequestResponse): CreditRequest {
     salarySlipFileName: safeFileName(response.salarySlipPath),
     workCertificateFileName: safeFileName(response.workCertificatePath),
     idDocumentFileName: safeFileName(response.idDocumentPath),
+    documents: mapRequestDocuments(response.documents, [
+      {
+        id: 'id-document',
+        label: "Pièce d'identité",
+        fileName: safeFileName(response.idDocumentPath),
+        downloadUrl: response.idDocumentPath ?? undefined,
+      },
+      {
+        id: 'salary-slip',
+        label: 'Bulletin de salaire',
+        fileName: safeFileName(response.salarySlipPath),
+        downloadUrl: response.salarySlipPath ?? undefined,
+      },
+      {
+        id: 'work-certificate',
+        label: 'Attestation de travail',
+        fileName: safeFileName(response.workCertificatePath),
+        downloadUrl: response.workCertificatePath ?? undefined,
+      },
+    ]),
     status: asRequestStatus(response.etatDossier),
     submittedAt: response.dateOuvertureDossier || new Date().toISOString(),
     decisionReason: response.motifRejet || undefined,

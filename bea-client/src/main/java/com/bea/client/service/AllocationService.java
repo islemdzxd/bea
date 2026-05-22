@@ -1,5 +1,6 @@
 package com.bea.client.service;
 
+import com.bea.client.dto.DocumentDto;
 import com.bea.client.dto.allocation.AllocationContextResponse;
 import com.bea.client.dto.allocation.AllocationRequestResponse;
 import com.bea.client.dto.allocation.AllocationSubmissionRequest;
@@ -7,11 +8,13 @@ import com.bea.client.model.Allocation;
 import com.bea.client.model.Client;
 import com.bea.client.repository.AllocationRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.file.Files;
@@ -33,6 +36,9 @@ public class AllocationService {
     private static final Path STORAGE_ROOT = Paths.get("uploads", "allocation");
 
     private final AllocationRepository allocationRepository;
+
+    @Value("${bea.public-base-url:http://localhost:8081}")
+    private String publicBaseUrl;
 
     public AllocationContextResponse getContext(Client client) {
         List<Allocation> history = allocationRepository.findByAddByOrderByDateSaisieDesc(client.getCli());
@@ -231,7 +237,8 @@ public class AllocationService {
             String fileName = prefix + extension;
             Path target = folder.resolve(fileName);
             Files.write(target, file.getBytes());
-            return target.toString();
+            // return a web-friendly relative path (uploads/allocation/<client>/<folderName>/<file>)
+            return String.join("/", "uploads", "allocation", client.getCli(), folderName, fileName);
         } catch (IOException exception) {
             throw new RuntimeException("Failed to store uploaded file", exception);
         }
@@ -299,6 +306,54 @@ public class AllocationService {
                 .passportVisaPagePath(allocation.getPassportVisaPagePath())
                 .passportNeantPagePath(allocation.getPassportNeantPagePath())
                 .ticketCopyPath(allocation.getTicketCopyPath())
+                .documents(buildDocuments(allocation))
                 .build();
+    }
+
+    private java.util.List<DocumentDto> buildDocuments(Allocation allocation) {
+        java.util.List<DocumentDto> documents = new ArrayList<>();
+        addDocument(documents, "passport-main", "Passeport (page principale)", allocation.getPassportMainPagePath());
+        addDocument(documents, "passport-visa", "Passeport (visa / néant)", allocation.getPassportVisaPagePath());
+        addDocument(documents, "passport-neant", "Passeport (néant)", allocation.getPassportNeantPagePath());
+        addDocument(documents, "ticket", "Billet / réservation", allocation.getTicketCopyPath());
+        return documents;
+    }
+
+    private void addDocument(java.util.List<DocumentDto> documents, String id, String label, String path) {
+        if (!StringUtils.hasText(path)) {
+            return;
+        }
+
+        String fileName = Paths.get(path).getFileName().toString();
+        documents.add(DocumentDto.builder()
+                .id(id)
+                .label(label)
+                .fileName(fileName)
+                .contentType(resolveContentType(fileName))
+                .downloadUrl(buildPublicUrl(path))
+                .build());
+    }
+
+    private String buildPublicUrl(String path) {
+        String normalizedBase = publicBaseUrl.replaceAll("/$", "");
+        String normalizedPath = path.startsWith("/") ? path.substring(1) : path;
+        return normalizedBase + "/" + normalizedPath;
+    }
+
+    private String resolveContentType(String fileName) {
+        String lower = fileName.toLowerCase();
+        if (lower.endsWith(".pdf")) {
+            return "application/pdf";
+        }
+        if (lower.endsWith(".png")) {
+            return "image/png";
+        }
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+            return "image/jpeg";
+        }
+        if (lower.endsWith(".webp")) {
+            return "image/webp";
+        }
+        return "application/octet-stream";
     }
 }

@@ -1,12 +1,10 @@
-package com.bea.admin.dto;
+package com.bea.client.dto;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 
 @Data
 @Builder
-@AllArgsConstructor
 public class DocumentDto {
     private String id;
     private String label;

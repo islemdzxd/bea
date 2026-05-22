@@ -332,6 +332,7 @@ public class AllocationAdminService {
                 .id(id)
                 .label(label)
                 .fileName(fileName)
+            .contentType(resolveMediaType(fileName).toString())
                 .downloadUrl("/api/allocations/" + code + "/documents/" + id)
                 .build());
     }
