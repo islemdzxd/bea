@@ -4,15 +4,20 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
+  Bell,
+  ChevronRight,
   LayoutDashboard,
   LogOut,
   Menu,
   Plane,
+  Settings2,
   Wallet,
   X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { clearSession, getSession } from '@/lib/auth';
+import { formatDateTime } from '@/lib/format';
+import { useBackOfficeData } from '@/hooks/use-back-office-store';
 import { cn } from '@/lib/utils';
 
 const nav = [
@@ -21,11 +26,28 @@ const nav = [
   { href: '/credits', label: 'Demandes de crédit', icon: Wallet },
 ];
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+function getAllocationStatusLabel(status: string) {
+  if (status === 'en_attente') return 'Demande d’allocation reçue';
+  if (status === 'approuve_attente_virement') return 'Allocation approuvée, virement attendu';
+  if (status === 'virement_recu') return 'Virement reçu pour allocation';
+  if (status === 'recu_envoye') return 'Reçu envoyé';
+  if (status === 'rejete') return 'Allocation rejetée';
+  return 'Allocation mise à jour';
+}
+
+function getCreditStatusLabel(status: string) {
+  if (status === 'approuve_rdv') return 'RDV fixé pour la demande de crédit';
+  if (status === 'rejete') return 'Demande de crédit rejetée';
+  return 'Demande de crédit mise à jour';
+}
+
+export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [session, setSessionState] = useState<ReturnType<typeof getSession>>(null);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [session, setSession] = useState<ReturnType<typeof getSession> | null>(null);
+  const { allocations, credits } = useBackOfficeData();
 
   useEffect(() => {
     const s = getSession();
@@ -33,13 +55,70 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       router.replace('/');
       return;
     }
-    setSessionState(s);
+    setSession(s);
   }, [pathname, router]);
 
   const handleLogout = () => {
     clearSession();
     router.replace('/');
   };
+
+  const notifications = useMemo(() => {
+    const allocationItems = allocations.map((allocation) => {
+      const latestHistory = allocation.history
+        .slice()
+        .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())[0];
+
+      return {
+        id: `allocation-${allocation.id}`,
+        title: allocation.clientName,
+        category: 'Allocation touristique',
+        message: latestHistory?.detail || getAllocationStatusLabel(allocation.status),
+        at: latestHistory?.at || allocation.createdAt,
+        href: `/allocations/${allocation.id}`,
+      };
+    });
+
+    const creditItems = credits.flatMap((credit) => {
+      const latestHistory = credit.history
+        .slice()
+        .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())[0];
+
+      const items = [
+        {
+          id: `credit-${credit.id}`,
+          title: credit.clientName,
+          category: 'Demande de crédit',
+          message:
+            latestHistory?.detail ||
+            getCreditStatusLabel(credit.status),
+          at: latestHistory?.at || credit.createdAt,
+          href: `/credits/${credit.id}`,
+        },
+      ];
+
+      if (credit.status === 'approuve_rdv' && credit.appointmentAt) {
+        items.unshift({
+          id: `credit-rdv-${credit.id}`,
+          title: credit.clientName,
+          category: 'Rendez-vous',
+          message: `RDV le ${formatDateTime(credit.appointmentAt)}${
+            credit.appointmentNote ? ` — ${credit.appointmentNote}` : ''
+          }`,
+          at: credit.appointmentAt,
+          href: `/credits/${credit.id}`,
+        });
+      }
+
+      return items;
+    });
+
+    return [...allocationItems, ...creditItems]
+      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+      .slice(0, 6);
+  }, [allocations, credits]);
+
+  const unreadCount = notifications.length;
 
   if (!session) return null;
 
@@ -129,11 +208,84 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <h1 className="text-lg font-semibold text-foreground">
             Banque Extérieure d&apos;Algérie
           </h1>
-          <div className="text-right">
-            <p className="text-sm font-medium">{session.name}</p>
-            <p className="text-xs capitalize text-muted-foreground">
-              {session.role}
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setNotificationsOpen((value) => !value)}
+                className="relative rounded-full border border-border bg-background p-2 text-foreground transition-colors hover:bg-secondary"
+                aria-label="Notifications récentes"
+              >
+                <Bell className="h-5 w-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-white">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {notificationsOpen && (
+                <div className="fixed right-6 top-20 z-50 w-[24rem] overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
+                  <div className="border-b border-border px-4 py-3">
+                    <p className="text-sm font-semibold text-foreground">Notifications récentes</p>
+                    <p className="text-xs text-muted-foreground">
+                      Suivi des allocations, crédits et rendez-vous
+                    </p>
+                  </div>
+                  <div className="max-h-[24rem] overflow-auto">
+                    {notifications.length > 0 ? (
+                      notifications.map((item) => (
+                        <Link
+                          key={item.id}
+                          href={item.href}
+                          onClick={() => setNotificationsOpen(false)}
+                          className="block border-b border-border px-4 py-3 transition-colors last:border-b-0 hover:bg-secondary/70"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="mt-0.5 rounded-full bg-primary/10 p-2 text-primary">
+                              <ChevronRight className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                                {item.category}
+                              </p>
+                              <p className="truncate text-sm font-medium text-foreground">
+                                {item.title}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {item.message}
+                              </p>
+                              <time className="mt-1 block text-xs text-muted-foreground">
+                                {formatDateTime(item.at)}
+                              </time>
+                            </div>
+                          </div>
+                        </Link>
+                      ))
+                    ) : (
+                      <div className="px-4 py-8 text-sm text-muted-foreground">
+                        Aucune notification récente.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Link
+              href="/settings"
+              className="rounded-full border border-border bg-background p-2 text-foreground transition-colors hover:bg-secondary"
+              aria-label="Paramètres"
+            >
+              <Settings2 className="h-5 w-5" />
+            </Link>
+
+            <div className="text-right">
+              <p className="text-sm font-medium">{session.name}</p>
+              <p className="text-xs capitalize text-muted-foreground">
+                {session.role}
+              </p>
+            </div>
           </div>
         </header>
         <main className="flex-1 overflow-auto p-6">{children}</main>

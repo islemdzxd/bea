@@ -8,6 +8,7 @@ import { Bell, Settings, LogOut, Menu, X } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { getSessionClientProfile } from '@/lib/client-session';
+import { useBanking } from '@/features/banking/banking-provider';
 
 interface SidebarItem {
   icon: React.ReactNode;
@@ -89,11 +90,59 @@ const sidebarItems: SidebarItem[] = [
   },
 ];
 
+type NotificationStatus = 'pending' | 'approved' | 'rejected';
+
+function getNotificationTone(status: NotificationStatus) {
+  if (status === 'approved') return 'success' as const;
+  if (status === 'rejected') return 'error' as const;
+  return 'warning' as const;
+}
+
+function getAllocationMessage(status: NotificationStatus) {
+  if (status === 'approved') return 'Demande d’allocation approuvée';
+  if (status === 'rejected') return 'Demande d’allocation rejetée';
+  return 'Demande d’allocation en attente';
+}
+
+function getCreditMessage(status: NotificationStatus) {
+  if (status === 'approved') return 'Demande de crédit approuvée - RDV à confirmer';
+  if (status === 'rejected') return 'Demande de crédit rejetée';
+  return 'Demande de crédit en attente';
+}
+
+function getCreditNotificationMessage(
+  status: NotificationStatus,
+  appointmentAt?: string,
+  appointmentNote?: string
+) {
+  if (appointmentAt) {
+    const noteSuffix = appointmentNote ? ` — ${appointmentNote}` : '';
+    return `RDV le ${formatAppointmentDateTime(appointmentAt)}${noteSuffix}`;
+  }
+
+  return getCreditMessage(status);
+}
+
+function formatNotificationDate(value: string) {
+  return new Intl.DateTimeFormat('fr-FR', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value));
+}
+
+function formatAppointmentDateTime(value: string) {
+  return new Intl.DateTimeFormat('fr-FR', {
+    dateStyle: 'full',
+    timeStyle: 'short',
+  }).format(new Date(value));
+}
+
 export default function DashboardLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { state } = useBanking();
   const [clientName, setClientName] = useState('Client');
   const [clientEmail, setClientEmail] = useState('client@bea.local');
   const [avatarSrc, setAvatarSrc] = useState('https://api.dicebear.com/7.x/avataaars/svg?seed=Client');
@@ -102,6 +151,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   useEffect(() => {
     const profile = getSessionClientProfile();
@@ -121,6 +171,74 @@ export default function DashboardLayout({
   }, []);
 
   const avatarFallback = useMemo(() => clientName.slice(0, 1).toUpperCase() || 'C', [clientName]);
+
+  const headerNotifications = useMemo(() => {
+    if (state.notifications.length > 0) {
+      return state.notifications.slice(0, 6);
+    }
+
+    const allocationNotifications = state.allocationRequests.slice(0, 3).map((request) => {
+      const message = getAllocationMessage(request.status);
+
+      return {
+        id: `allocation-${request.id}`,
+        title: `Allocation ${request.destinationCountry}`,
+        message,
+        tone: getNotificationTone(request.status),
+        createdAt: request.submittedAt,
+        read: false,
+        href: '/dashboard/tourism',
+      };
+    });
+
+    const creditNotifications = state.creditRequests.slice(0, 3).map((request) => {
+      const appointmentDetails = getCreditNotificationMessage(
+        request.status,
+        request.appointmentAt,
+        request.appointmentNote
+      );
+
+      return {
+        id: `credit-${request.id}`,
+        title: `Crédit ${request.creditType}`,
+        message: appointmentDetails,
+        tone: getNotificationTone(request.status),
+        createdAt: request.submittedAt,
+        read: false,
+        href: '/dashboard/loans',
+      };
+    });
+
+    return [...allocationNotifications, ...creditNotifications].slice(0, 6);
+  }, [state.allocationRequests, state.creditRequests, state.notifications]);
+
+  const pendingRequests = useMemo(
+    () => [
+      ...state.allocationRequests
+        .filter((request) => request.status === 'pending')
+        .slice(0, 3)
+        .map((request) => ({
+          id: `pending-allocation-${request.id}`,
+          title: `Allocation en attente • ${request.destinationCountry}`,
+          message: 'Suivre la demande et les pièces jointes',
+          createdAt: request.submittedAt,
+          href: '/dashboard/tourism',
+        })),
+      ...state.creditRequests
+        .filter((request) => request.status === 'pending')
+        .slice(0, 3)
+        .map((request) => ({
+          id: `pending-credit-${request.id}`,
+          title: `Crédit en attente • ${request.creditType}`,
+          message: 'Suivre le dossier et les prochaines étapes',
+          createdAt: request.submittedAt,
+          href: '/dashboard/loans',
+        })),
+    ],
+    [state.allocationRequests, state.creditRequests]
+  );
+
+  const unreadNotifications = headerNotifications.filter((notification) => !notification.read);
 
   const handleLogout = () => {
     localStorage.removeItem('isLoggedIn');
@@ -219,12 +337,83 @@ export default function DashboardLayout({
 
           {/* Right Header Items */}
           <div className="flex items-center gap-2 md:gap-3">
-            <Button variant="ghost" size="icon" className="relative rounded-xl">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-primary" />
-            </Button>
-            <Button variant="ghost" size="icon" className="rounded-xl">
-              <Settings className="w-5 h-5" />
+            <div className="relative">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative rounded-xl"
+                onClick={() => setNotificationsOpen((value) => !value)}
+                aria-label="Notifications récentes"
+              >
+                <Bell className="w-5 h-5" />
+                {(unreadNotifications.length > 0 || pendingRequests.length > 0) && (
+                  <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary" />
+                )}
+              </Button>
+
+              {notificationsOpen && (
+                <div className="fixed right-6 top-20 z-50 w-[22rem] overflow-hidden rounded-2xl border border-border/80 bg-white shadow-xl">
+                  <div className="border-b border-border/70 px-4 py-3">
+                    <p className="text-sm font-semibold text-foreground">Notifications récentes</p>
+                    <p className="text-xs text-muted-foreground">
+                      Allocation, crédit et rendez-vous de votre compte
+                    </p>
+                  </div>
+                  <div className="max-h-[24rem] overflow-auto">
+                    {unreadNotifications.length === 0 && pendingRequests.length === 0 ? (
+                      <div className="px-4 py-8 text-sm text-muted-foreground">
+                        Aucune notification récente.
+                      </div>
+                    ) : (
+                      <>
+                        {unreadNotifications.map((notification) => (
+                          <button
+                            key={notification.id}
+                            type="button"
+                            onClick={() => {
+                              setNotificationsOpen(false);
+                              if ('href' in notification && notification.href) {
+                                router.push(notification.href);
+                              }
+                            }}
+                            className="block w-full border-b border-border/70 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-muted/50"
+                          >
+                            <p className="text-sm font-medium text-foreground">{notification.title}</p>
+                            <p className="mt-1 text-sm text-muted-foreground">{notification.message}</p>
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              {formatNotificationDate(notification.createdAt)}
+                            </p>
+                          </button>
+                        ))}
+
+                        {pendingRequests.map((request) => (
+                          <button
+                            key={request.id}
+                            type="button"
+                            onClick={() => {
+                              setNotificationsOpen(false);
+                              router.push(request.href);
+                            }}
+                            className="block w-full border-b border-border/70 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-muted/50"
+                          >
+                            <p className="text-sm font-medium text-foreground">{request.title}</p>
+                            <p className="mt-1 text-sm text-muted-foreground">{request.message}</p>
+                            <p className="mt-2 text-xs text-muted-foreground">
+                              {formatNotificationDate(request.createdAt)}
+                            </p>
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Button asChild variant="ghost" size="icon" className="rounded-xl">
+              <Link href="/dashboard/settings" aria-label="Settings">
+                <Settings className="w-5 h-5" />
+              </Link>
             </Button>
             <Button variant="ghost" size="icon" className="rounded-xl" onClick={handleLogout} title="Logout">
               <LogOut className="w-5 h-5" />

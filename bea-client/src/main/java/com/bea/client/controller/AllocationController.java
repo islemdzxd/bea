@@ -46,6 +46,11 @@ public class AllocationController {
 		return ResponseEntity.ok(allocationService.getRequest(client, codeDeclaration));
 	}
 
+	@GetMapping("/eligible-clis")
+	public ResponseEntity<List<String>> getCliWithoutAllocationThisYear() {
+		return ResponseEntity.ok(allocationService.getCliWithoutAllocationThisYear());
+	}
+
 	@PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	public ResponseEntity<AllocationRequestResponse> submit(Authentication authentication,
 															@ModelAttribute AllocationSubmissionRequest request) {

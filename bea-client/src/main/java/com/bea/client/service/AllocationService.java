@@ -8,6 +8,7 @@ import com.bea.client.model.Allocation;
 import com.bea.client.model.Client;
 import com.bea.client.repository.AllocationRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -20,25 +21,29 @@ import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
-import java.time.Year;
 import java.time.temporal.ChronoUnit;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AllocationService {
 
     private static final String STATUS_PENDING = "EN_ATTENTE";
     private static final BigDecimal ADULT_LIMIT = BigDecimal.valueOf(750);
     private static final BigDecimal MINOR_LIMIT = BigDecimal.valueOf(300);
-    private static final Path STORAGE_ROOT = Paths.get("uploads", "allocation");
 
     private final AllocationRepository allocationRepository;
 
     @Value("${bea.public-base-url:http://localhost:8081}")
     private String publicBaseUrl;
+
+    @Value("${bea.uploads.root:uploads}")
+    private String uploadsRoot;
 
     public AllocationContextResponse getContext(Client client) {
         List<Allocation> history = allocationRepository.findByAddByOrderByDateSaisieDesc(client.getCli());
@@ -70,6 +75,12 @@ public class AllocationService {
             throw new RuntimeException("Allocation request not found");
         }
         return toResponse(client, allocation);
+    }
+
+    public List<String> getCliWithoutAllocationThisYear() {
+        LocalDate yearStart = LocalDate.of(LocalDate.now().getYear(), 1, 1);
+        LocalDate yearEnd = LocalDate.of(LocalDate.now().getYear(), 12, 31);
+        return allocationRepository.findCliWithoutTouristAllocationBetween(yearStart, yearEnd);
     }
 
     public AllocationRequestResponse submit(Client client, AllocationSubmissionRequest request) {
@@ -124,11 +135,10 @@ public class AllocationService {
         allocation.setDateAb(null);
         allocation.setAbBy(null);
 
-        String allocationFolder = allocation.getCodeDeclaration();
-        allocation.setPassportMainPagePath(storeFile(client, allocationFolder, "passport-main", request.getPassportMainPage()));
-        allocation.setPassportVisaPagePath(storeFile(client, allocationFolder, "passport-visa", request.getPassportVisaPage()));
-        allocation.setPassportNeantPagePath(storeFile(client, allocationFolder, "passport-neant", request.getPassportNeantPage()));
-        allocation.setTicketCopyPath(storeFile(client, allocationFolder, "ticket-copy", request.getTicketCopy()));
+        allocation.setPassportMainPagePath(storeFile("passport-main", request.getPassportMainPage()));
+        allocation.setPassportVisaPagePath(storeFile("passport-visa", request.getPassportVisaPage()));
+        allocation.setPassportNeantPagePath(storeFile("passport-neant", request.getPassportNeantPage()));
+        allocation.setTicketCopyPath(storeFile("ticket-copy", request.getTicketCopy()));
 
         Allocation saved = allocationRepository.save(allocation);
         return toResponse(client, saved);
@@ -218,29 +228,79 @@ public class AllocationService {
         return "DEC" + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
     }
 
-    private String storeFile(Client client, String folderName, String prefix, MultipartFile file) {
+    private String storeFile(String prefix, MultipartFile file) {
         if (file == null || file.isEmpty()) {
             return null;
         }
 
         try {
-            Path folder = STORAGE_ROOT.resolve(client.getCli()).resolve(folderName);
+            validateFileType(file, prefix);
+
+            Path storageRootPath = Paths.get(uploadsRoot).toAbsolutePath().normalize();
+            Path folder = storageRootPath.resolve(getStorageCategory(prefix));
             Files.createDirectories(folder);
 
-            String originalName = StringUtils.cleanPath(file.getOriginalFilename() == null ? "document" : file.getOriginalFilename());
-            String extension = "";
-            int dotIndex = originalName.lastIndexOf('.');
-            if (dotIndex >= 0) {
-                extension = originalName.substring(dotIndex);
+            String originalFilename = file.getOriginalFilename();
+            if (!StringUtils.hasText(originalFilename)) {
+                originalFilename = "document";
             }
-
-            String fileName = prefix + extension;
+            String originalName = StringUtils.cleanPath(originalFilename);
+            String extension = extractExtension(originalName);
+            String baseName = extractBaseName(originalName);
+            String fileName = System.currentTimeMillis() + "_" + prefix + "_" + baseName + "_" + UUID.randomUUID().toString().substring(0, 8) + extension;
             Path target = folder.resolve(fileName);
-            Files.write(target, file.getBytes());
-            // return a web-friendly relative path (uploads/allocation/<client>/<folderName>/<file>)
-            return String.join("/", "uploads", "allocation", client.getCli(), folderName, fileName);
+            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+
+            log.info("Stored uploaded file prefix={} originalName={} savedPath={} exists={}",
+                    prefix,
+                    originalName,
+                    target.toAbsolutePath().normalize(),
+                    Files.exists(target));
+            return String.join("/", "uploads", getStorageCategory(prefix), fileName);
         } catch (IOException exception) {
             throw new RuntimeException("Failed to store uploaded file", exception);
+        }
+    }
+
+    private String getStorageCategory(String prefix) {
+        return switch (prefix) {
+            case "ticket-copy" -> "tickets";
+            default -> "passports";
+        };
+    }
+
+    private String extractExtension(String originalName) {
+        int dotIndex = originalName.lastIndexOf('.');
+        if (dotIndex < 0 || dotIndex == originalName.length() - 1) {
+            return "";
+        }
+        return originalName.substring(dotIndex);
+    }
+
+    private String extractBaseName(String originalName) {
+        int dotIndex = originalName.lastIndexOf('.');
+        String baseName = dotIndex < 0 ? originalName : originalName.substring(0, dotIndex);
+        String cleaned = baseName.replaceAll("[^A-Za-z0-9]+", "_").replaceAll("_+", "_");
+        cleaned = cleaned.replaceAll("(^_+)|(_+$)", "");
+        if (!StringUtils.hasText(cleaned)) {
+            return "document";
+        }
+        return cleaned.toLowerCase(Locale.ROOT);
+    }
+
+    private void validateFileType(MultipartFile file, String prefix) {
+        String contentType = file.getContentType();
+        String originalName = file.getOriginalFilename();
+        String normalizedContentType = contentType == null ? "" : contentType.toLowerCase(Locale.ROOT);
+        String normalizedOriginalName = originalName == null ? "" : originalName.toLowerCase(Locale.ROOT);
+        boolean accepted = normalizedContentType.startsWith("image/")
+                || normalizedContentType.equals("application/pdf")
+                || normalizedOriginalName.endsWith(".png")
+                || normalizedOriginalName.endsWith(".jpg")
+                || normalizedOriginalName.endsWith(".jpeg")
+                || normalizedOriginalName.endsWith(".pdf");
+        if (!accepted) {
+            throw new RuntimeException("Invalid file type for " + prefix + ". Allowed: png, jpg, jpeg, pdf");
         }
     }
 

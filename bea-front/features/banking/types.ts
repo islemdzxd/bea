@@ -76,6 +76,8 @@ export interface CreditRequest {
   idDocumentFileName: string;
   documents: RequestDocument[];
   status: RequestStatus;
+  appointmentAt?: string;
+  appointmentNote?: string;
   submittedAt: string;
   decisionReason?: string;
   estimatedMonthlyPayment: number;

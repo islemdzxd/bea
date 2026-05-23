@@ -10,7 +10,9 @@ import com.bea.admin.model.Client;
 import com.bea.admin.model.User;
 import com.bea.admin.repository.AllocationRepository;
 import com.bea.admin.repository.ClientRepository;
+import com.bea.admin.exception.DocumentNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -30,6 +32,7 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AllocationAdminService {
 
     public static final String EN_ATTENTE = "EN_ATTENTE";
@@ -164,45 +167,70 @@ public class AllocationAdminService {
     @Transactional(readOnly = true)
     public Resource loadDocument(String codeDeclaration, String documentId) {
         Allocation allocation = requireAllocation(codeDeclaration);
-        String pathValue = switch (documentId) {
+        String normalizedDocumentId = normalizeDocumentId(documentId);
+        String pathValue = switch (normalizedDocumentId) {
             case "passport-main" -> allocation.getPassportMainPagePath();
             case "passport-visa" -> allocation.getPassportVisaPagePath();
             case "passport-neant" -> allocation.getPassportNeantPagePath();
-            case "ticket" -> allocation.getTicketCopyPath();
-            default -> throw new RuntimeException("Document inconnu");
+            case "ticket-copy" -> allocation.getTicketCopyPath();
+            default -> throw new DocumentNotFoundException("Document inconnu: " + documentId);
         };
         if (!StringUtils.hasText(pathValue)) {
-            throw new RuntimeException("Document non disponible");
+            throw new DocumentNotFoundException("Document non disponible: " + documentId);
         }
         try {
             Path path = resolveStoredFilePath(pathValue);
+            boolean exists = java.nio.file.Files.exists(path);
+            log.info("Loading allocation document codeDeclaration={} documentType={} storedPath={} resolvedPath={} exists={}",
+                    codeDeclaration,
+                    normalizedDocumentId,
+                    pathValue,
+                    path.toAbsolutePath().normalize(),
+                    exists);
+            if (!exists) {
+                throw new DocumentNotFoundException("Fichier introuvable: " + path.toAbsolutePath().normalize());
+            }
             Resource resource = new UrlResource(path.toUri());
             if (!resource.exists() || !resource.isReadable()) {
-                resource = new UrlResource(Paths.get(pathValue).toAbsolutePath().normalize().toUri());
-            }
-            if (!resource.exists() || !resource.isReadable()) {
-                throw new RuntimeException("Fichier introuvable");
+                throw new DocumentNotFoundException("Fichier introuvable: " + path.toAbsolutePath().normalize());
             }
             return resource;
+        } catch (DocumentNotFoundException ex) {
+            throw ex;
         } catch (Exception ex) {
             throw new RuntimeException("Impossible de charger le document", ex);
         }
     }
 
+    private String normalizeDocumentId(String documentId) {
+        if (!StringUtils.hasText(documentId)) {
+            return "";
+        }
+        String normalized = documentId.trim().toLowerCase();
+        if ("ticket".equals(normalized)) {
+            return "ticket-copy";
+        }
+        return normalized;
+    }
+
     private Path resolveStoredFilePath(String pathValue) {
+        Path uploadsRootPath = Paths.get(uploadsRoot).toAbsolutePath().normalize();
+        String normalized = pathValue.trim().replace('\\', '/');
+
+        if (normalized.startsWith("/uploads/")) {
+            return uploadsRootPath.resolve(normalized.substring("/uploads/".length())).normalize();
+        }
+
+        if (normalized.startsWith("uploads/")) {
+            return uploadsRootPath.resolve(normalized.substring("uploads/".length())).normalize();
+        }
+
         Path candidate = Paths.get(pathValue).normalize();
         if (candidate.isAbsolute()) {
-            return candidate;
+            return candidate.toAbsolutePath().normalize();
         }
 
-        Path uploadsRootPath = Paths.get(uploadsRoot).toAbsolutePath().normalize();
-        if (candidate.startsWith(Paths.get("uploads"))) {
-            candidate = uploadsRootPath.resolve(Paths.get("uploads").relativize(candidate)).normalize();
-        } else {
-            candidate = uploadsRootPath.resolve(candidate).normalize();
-        }
-
-        return candidate.toAbsolutePath().normalize();
+        return uploadsRootPath.resolve(candidate).normalize();
     }
 
     public MediaType resolveMediaType(String fileName) {
@@ -315,7 +343,7 @@ public class AllocationAdminService {
                         ? allocation.getCodeMonnaie()
                         : allocation.getMoannaie())
                 .status(status)
-                .documents(buildDocuments(code, allocation))
+                .documents(buildDocuments(allocation))
                 .observation(allocation.getObservation())
                 .transferReference(allocation.getTransferReference())
                 .receiptSignedAt(allocation.getDateAb() != null
@@ -327,12 +355,12 @@ public class AllocationAdminService {
                 .build();
     }
 
-    private List<DocumentDto> buildDocuments(String code, Allocation allocation) {
+    private List<DocumentDto> buildDocuments(Allocation allocation) {
         List<DocumentDto> docs = new ArrayList<>();
-        addDocument(docs, "passport-main", "Passeport (page principale)", allocation.getPassportMainPagePath(), code);
-        addDocument(docs, "passport-visa", "Passeport (visa / néant)", allocation.getPassportVisaPagePath(), code);
-        addDocument(docs, "passport-neant", "Passeport (néant)", allocation.getPassportNeantPagePath(), code);
-        addDocument(docs, "ticket", "Billet / réservation", allocation.getTicketCopyPath(), code);
+        addDocument(docs, "passport-main", "Passeport (page principale)", allocation.getPassportMainPagePath());
+        addDocument(docs, "passport-visa", "Passeport (visa / néant)", allocation.getPassportVisaPagePath());
+        addDocument(docs, "passport-neant", "Passeport (néant)", allocation.getPassportNeantPagePath());
+        addDocument(docs, "ticket", "Billet / réservation", allocation.getTicketCopyPath());
         return docs;
     }
 
@@ -340,20 +368,42 @@ public class AllocationAdminService {
             List<DocumentDto> docs,
             String id,
             String label,
-            String path,
-            String code
+            String path
     ) {
         if (!StringUtils.hasText(path)) {
             return;
         }
+        Path resolvedPath = resolveStoredFilePath(path);
+        if (!java.nio.file.Files.exists(resolvedPath)) {
+            log.warn("Skipping missing allocation document id={} label={} storedPath={} resolvedPath={}",
+                    id,
+                    label,
+                    path,
+                    resolvedPath.toAbsolutePath().normalize());
+            return;
+        }
         String fileName = Paths.get(path).getFileName().toString();
+        String downloadUrl = buildPublicUrl(path);
+        log.info("Prepared allocation document id={} label={} fileName={} storedPath={} resolvedPath={} downloadUrl={}",
+                id,
+                label,
+                fileName,
+                path,
+                resolvedPath.toAbsolutePath().normalize(),
+                downloadUrl);
         docs.add(DocumentDto.builder()
                 .id(id)
                 .label(label)
                 .fileName(fileName)
-            .contentType(resolveMediaType(fileName).toString())
-                .downloadUrl("/api/allocations/" + code + "/documents/" + id)
+                .contentType(resolveMediaType(fileName).toString())
+                .downloadUrl(downloadUrl)
                 .build());
+    }
+
+    private String buildPublicUrl(String path) {
+        String normalizedBase = publicBaseUrl.replaceAll("/$", "");
+        String normalizedPath = path.startsWith("/") ? path.substring(1) : path;
+        return normalizedBase + "/" + normalizedPath;
     }
 
     private List<AuditEntryDto> buildHistory(Allocation allocation) {

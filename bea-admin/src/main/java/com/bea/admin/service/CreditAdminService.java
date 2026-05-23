@@ -233,8 +233,14 @@ public class CreditAdminService {
                 .label(label)
                 .fileName(Paths.get(path).getFileName().toString())
                 .contentType(resolveMediaType(Paths.get(path).getFileName().toString()).toString())
-                .downloadUrl("/api/credits/" + numero + "/documents/" + id)
+                .downloadUrl(buildPublicUrl(path))
                 .build());
+    }
+
+    private String buildPublicUrl(String path) {
+        String normalizedBase = publicBaseUrl.replaceAll("/$", "");
+        String normalizedPath = path.startsWith("/") ? path.substring(1) : path;
+        return normalizedBase + "/" + normalizedPath;
     }
 
     private List<AuditEntryDto> buildHistory(Credit credit) {

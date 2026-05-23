@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { FileText, Download, Loader2, Image as ImageIcon, FileImage } from 'lucide-react';
+import { FileText, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { adminFetchBlob } from '@/lib/bea-admin-api';
@@ -89,7 +89,8 @@ export function DocumentList({ documents }: Readonly<{ documents: RequestDocumen
       setPreviewUrl(url);
     } catch (err) {
       setPreviewUrl(null);
-      setError(err instanceof Error ? err.message : 'Erreur lors du chargement du document');
+      const reason = err instanceof Error ? err.message : 'Erreur lors du chargement du document';
+      setError(`${reason} (URL: ${documentUrl})`);
     } finally {
       setLoading(false);
     }

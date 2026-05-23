@@ -25,6 +25,16 @@ function formatCurrency(value: number) {
   return value.toLocaleString('en-US');
 }
 
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString('fr-DZ', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export function CreditWorkflow() {
   const { state, submitCreditRequest } = useBanking();
   const [form, setForm] = useState<CreditFormState>({
@@ -304,6 +314,12 @@ export function CreditWorkflow() {
                     <Badge className={creditStatusClass(request.status)}>{request.status}</Badge>
                   </div>
                   {request.decisionReason && <p className="mt-2 text-sm text-muted-foreground">{request.decisionReason}</p>}
+                  {request.status === 'approved' && request.appointmentAt && (
+                    <p className="mt-2 text-sm text-emerald-700">
+                      RDV : {formatDateTime(request.appointmentAt)}
+                      {request.appointmentNote ? ` — ${request.appointmentNote}` : ''}
+                    </p>
+                  )}
                   <p className="mt-2 text-xs text-muted-foreground">Submitted {new Date(request.submittedAt).toLocaleString()}</p>
                 </div>
               ))}

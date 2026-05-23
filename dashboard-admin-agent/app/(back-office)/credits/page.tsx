@@ -96,7 +96,12 @@ export default function CreditsPage() {
                   </p>
                   {c.appointmentAt && c.status === 'approuve_rdv' && (
                     <p className="text-sm text-green-800 mt-1">
-                      RDV : {formatDate(c.appointmentAt)}
+                      RDV : {formatDate(c.appointmentAt)} à{' '}
+                      {new Date(c.appointmentAt).toLocaleTimeString('fr-DZ', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                      {c.appointmentNote ? ` — ${c.appointmentNote}` : ''}
                     </p>
                   )}
                 </div>

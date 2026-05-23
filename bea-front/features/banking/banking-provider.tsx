@@ -146,6 +146,8 @@ type CreditRequestResponse = {
   dateOuvertureDossier?: string | null;
   dateModificationDossier?: string | null;
   dateDernierEtat?: string | null;
+  appointmentAt?: string | null;
+  appointmentNote?: string | null;
   motifRejet?: string | null;
   salarySlipPath?: string | null;
   workCertificatePath?: string | null;
@@ -433,6 +435,8 @@ function mapCredit(response: CreditRequestResponse): CreditRequest {
       },
     ]),
     status: asRequestStatus(response.etatDossier),
+    appointmentAt: response.appointmentAt || undefined,
+    appointmentNote: response.appointmentNote || undefined,
     submittedAt: response.dateOuvertureDossier || new Date().toISOString(),
     decisionReason: response.motifRejet || undefined,
     estimatedMonthlyPayment: Number(response.estimatedMonthlyPayment ?? 0),

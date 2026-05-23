@@ -6,7 +6,6 @@ import com.bea.admin.service.AllocationAdminService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,7 +15,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/allocations")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class AllocationAdminController {
 
     private final AllocationAdminService allocationAdminService;
@@ -76,7 +74,7 @@ public class AllocationAdminController {
         String fileName = Paths.get(resource.getFilename() != null ? resource.getFilename() : documentId + ".pdf")
                 .getFileName().toString();
         return ResponseEntity.ok()
-                .contentType(allocationAdminService.resolveMediaType(fileName))
+            .contentType(java.util.Objects.requireNonNull(allocationAdminService.resolveMediaType(fileName)))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
                 .body(resource);
     }
