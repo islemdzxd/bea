@@ -33,7 +33,8 @@ import java.util.Set;
 public class AllocationAdminService {
 
     public static final String EN_ATTENTE = "EN_ATTENTE";
-    public static final String APPROUVE_ATTENTE_VIREMENT = "APPROUVE_ATTENTE_VIREMENT";
+    public static final String APPROUVE_ATTENTE_VIREMENT = "APPROUVE_ATTENTE_VIR";
+    public static final String LEGACY_APPROUVE_ATTENTE_VIREMENT = "APPROUVE_ATTENTE_VIREMENT";
     public static final String VIREMENT_RECU = "VIREMENT_RECU";
     public static final String RECU_ENVOYE = "RECU_ENVOYE";
     public static final String REJETE = "REJETE";
@@ -69,8 +70,12 @@ public class AllocationAdminService {
     @Transactional
     public AllocationAdminResponse approve(String codeDeclaration, DecisionAllocationRequest request) {
         Allocation allocation = requireAllocation(codeDeclaration);
-        if (!EN_ATTENTE.equalsIgnoreCase(normalizeStatus(allocation.getStatu()))) {
-            throw new RuntimeException("Seules les demandes en attente peuvent être approuvées");
+        String currentStatus = resolveStatus(allocation);
+        if (isAwaitingTransferStatus(currentStatus)) {
+            return toResponse(allocation);
+        }
+        if (!EN_ATTENTE.equalsIgnoreCase(currentStatus)) {
+            throw new RuntimeException("Seules les demandes en attente peuvent être approuvées (statut actuel: " + currentStatus + ")");
         }
         requireObservation(request);
 
@@ -89,7 +94,7 @@ public class AllocationAdminService {
     @Transactional
     public AllocationAdminResponse reject(String codeDeclaration, DecisionAllocationRequest request) {
         Allocation allocation = requireAllocation(codeDeclaration);
-        if (!EN_ATTENTE.equalsIgnoreCase(normalizeStatus(allocation.getStatu()))) {
+        if (!EN_ATTENTE.equalsIgnoreCase(resolveStatus(allocation))) {
             throw new RuntimeException("Seules les demandes en attente peuvent être rejetées");
         }
         requireObservation(request);
@@ -108,7 +113,7 @@ public class AllocationAdminService {
     @Transactional
     public AllocationAdminResponse confirmTransfer(String codeDeclaration, DecisionAllocationRequest request) {
         Allocation allocation = requireAllocation(codeDeclaration);
-        if (!APPROUVE_ATTENTE_VIREMENT.equalsIgnoreCase(normalizeStatus(allocation.getStatu()))) {
+        if (!isAwaitingTransferStatus(resolveStatus(allocation))) {
             throw new RuntimeException("Le virement ne peut être confirmé qu'après approbation");
         }
         if (!StringUtils.hasText(request.getTransferReference())) {
@@ -127,7 +132,7 @@ public class AllocationAdminService {
     @Transactional
     public AllocationAdminResponse sendReceipt(String codeDeclaration) {
         Allocation allocation = requireAllocation(codeDeclaration);
-        if (!VIREMENT_RECU.equalsIgnoreCase(normalizeStatus(allocation.getStatu()))) {
+        if (!VIREMENT_RECU.equalsIgnoreCase(resolveStatus(allocation))) {
             throw new RuntimeException("Le reçu ne peut être envoyé qu'après réception du virement");
         }
 
@@ -145,7 +150,7 @@ public class AllocationAdminService {
     @Transactional
     public AllocationAdminResponse closeWithoutFollowUp(String codeDeclaration) {
         Allocation allocation = requireAllocation(codeDeclaration);
-        if (TERMINAL.contains(normalizeStatus(allocation.getStatu()))) {
+        if (TERMINAL.contains(resolveStatus(allocation))) {
             throw new RuntimeException("Cette demande est déjà clôturée");
         }
 
@@ -217,7 +222,7 @@ public class AllocationAdminService {
     public DashboardStatsResponse buildStats(List<AllocationAdminResponse> allocations) {
         long pending = allocations.stream().filter(a -> EN_ATTENTE.equalsIgnoreCase(a.getStatus())).count();
         long awaiting = allocations.stream()
-                .filter(a -> APPROUVE_ATTENTE_VIREMENT.equalsIgnoreCase(a.getStatus())).count();
+            .filter(a -> isAwaitingTransferStatus(a.getStatus())).count();
         long received = allocations.stream()
                 .filter(a -> VIREMENT_RECU.equalsIgnoreCase(a.getStatus())).count();
         long urgent = allocations.stream()
@@ -236,7 +241,7 @@ public class AllocationAdminService {
     protected void applyAutoClosures() {
         LocalDateTime now = LocalDateTime.now();
         for (Allocation allocation : allocationRepository.findAll()) {
-            if (TERMINAL.contains(normalizeStatus(allocation.getStatu()))) {
+            if (TERMINAL.contains(resolveStatus(allocation))) {
                 continue;
             }
             if (allocation.getDateAllez() == null) {
@@ -288,7 +293,7 @@ public class AllocationAdminService {
             }
         }
 
-        String status = normalizeStatus(allocation.getStatu());
+        String status = resolveStatus(allocation);
         String code = allocation.getCodeDeclaration();
 
         return AllocationAdminResponse.builder()
@@ -390,8 +395,40 @@ public class AllocationAdminService {
                 .build();
     }
 
-    private String normalizeStatus(String statu) {
-        return statu == null ? EN_ATTENTE : statu.trim().toUpperCase();
+    private String normalizeStatus(String status) {
+        if (status == null) {
+            return EN_ATTENTE;
+        }
+        String normalized = status.trim().toUpperCase();
+        if (LEGACY_APPROUVE_ATTENTE_VIREMENT.equals(normalized)) {
+            return APPROUVE_ATTENTE_VIREMENT;
+        }
+        if ("EN ATTENTE".equals(normalized) || "EN-ATTENTE".equals(normalized)) {
+            return EN_ATTENTE;
+        }
+        return normalized;
+    }
+
+    private String resolveStatus(Allocation allocation) {
+        if (StringUtils.hasText(allocation.getStatu())) {
+            return normalizeStatus(allocation.getStatu());
+        }
+        if (StringUtils.hasText(allocation.getEtat())) {
+            return normalizeStatus(allocation.getEtat());
+        }
+        if (StringUtils.hasText(allocation.getEve())) {
+            return normalizeStatus(allocation.getEve());
+        }
+        return EN_ATTENTE;
+    }
+
+    private boolean isAwaitingTransferStatus(String status) {
+        if (status == null) {
+            return false;
+        }
+        String normalized = status.trim().toUpperCase();
+        return APPROUVE_ATTENTE_VIREMENT.equals(normalized)
+                || LEGACY_APPROUVE_ATTENTE_VIREMENT.equals(normalized);
     }
 
     private String buildName(String nom, String prenom) {

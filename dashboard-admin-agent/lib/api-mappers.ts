@@ -73,6 +73,7 @@ export interface ApiAuthResponse {
 const ALLOCATION_STATUS_MAP: Record<string, AllocationStatus> = {
   EN_ATTENTE: 'en_attente',
   APPROUVE_ATTENTE_VIREMENT: 'approuve_attente_virement',
+  APPROUVE_ATTENTE_VIR: 'approuve_attente_virement',
   VIREMENT_RECU: 'virement_recu',
   RECU_ENVOYE: 'recu_envoye',
   REJETE: 'rejete',
