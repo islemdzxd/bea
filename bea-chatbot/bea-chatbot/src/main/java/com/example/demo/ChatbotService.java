@@ -14,7 +14,10 @@ public class ChatbotService {
         message = message.toLowerCase();
 
         // =========================================================
-        // 🌍 HUMAN INTERACTION LAYER (ENGLISH)
+        // 🌍 HUMAN INTERACTION LAYER (ENGLISH + FRENCH KEYWORDS)
+        // This service uses simple keyword matching to provide helpful,
+        // actionable answers in either English or French depending on
+        // the user's message. Responses are intentionally more detailed.
         // =========================================================
         if (message.equals("thanks")
                  || message.equals("thank you")
@@ -28,7 +31,7 @@ public class ChatbotService {
                  || message.equals("cool")
                  || message.equals("perfect")) {
 
-                    return "Glad I could help 👍 If you need anything else, just tell me.";
+                    return "Glad I could help 👍 If you need anything else, just tell me. For example, you can ask: 'How do I check my balance?' or 'How do I report a lost card?'";
                 }
 
                 if (message.equals("sorry")
@@ -37,7 +40,7 @@ public class ChatbotService {
                  || message.equals("oopsie")
                  || message.equals("excuse me")) {
 
-                    return "No worries at all 👍 How can I help you now?";
+                    return "No worries at all 👍 How can I help you now? You can ask about your account, recent transactions, or how to contact support.";
                 }
 
                 if (message.equals("bye")
@@ -47,7 +50,7 @@ public class ChatbotService {
                  || message.equals("see ya")
                  || message.equals("talk later")) {
 
-                    return "Take care 👋 If you need help again, I’ll be here.";
+                    return "Take care 👋 If you need help again, I’ll be here. Tip: you can type 'restart' to start over.";
                 }
 
                 if (message.equals("wow")
@@ -57,7 +60,7 @@ public class ChatbotService {
                  || message.equals("crazy")
                  || message.equals("insane")) {
 
-                    return "Yeah 😄 tell me what’s going on and I’ll help you with it.";
+                    return "Yeah 😄 tell me what’s going on and I’ll help you with it. Try asking: 'Why was my transaction declined?' or 'How to open an account?'";
                 }
 
         // =========================================================
@@ -70,8 +73,15 @@ public class ChatbotService {
                          || message.equals("good afternoon")
                          || message.equals("good evening")) {
 
-                            return "Hey 👋 I’m here to help you step by step. What do you need?";
+                            return "Hey 👋 I’m here to help you step by step. What do you need? You can ask in English or French.";
                         }
+
+        // =========================================================
+        // ACCOUNT / BALANCE
+        // =========================================================
+        if (message.contains("balance") || message.contains("solde") || message.contains("my balance") || message.contains("mon solde")) {
+            return "You can check your account balance in the app under Accounts → Balances. If you prefer, I can guide you step‑by‑step: open the app, go to 'Accounts', then select the account to see real‑time balance and pending transactions.\nSi vous préférez en français : ouvrez l'application → Comptes → Sélectionnez le compte pour voir le solde et opérations en attente.";
+        }
 
         // =========================================================
         // CREDIT CARD (EN)
@@ -79,19 +89,19 @@ public class ChatbotService {
         if (message.contains("card") || message.contains("cards") || (message.contains("card") && message.contains("credit"))) {
 
             if (message.contains("add") || message.contains("new")) {
-                return "To add a new card, go to Credit Card → Add New Card and follow the instructions.";
+                return "To add a new card, go to Credit Card → Add New Card and follow the instructions. You'll need to confirm your identity and enter the card details.\nAstuce: pour ajouter une carte, allez dans Carte → Ajouter une nouvelle carte et suivez les instructions.";
             }
 
             else if (message.contains("lost") || message.contains("stolen")) {
-                return "That sounds serious — your card might be at risk. Freeze it immediately, go to credit cards → card setting → block card.";
+                return "That sounds serious — your card might be at risk. Freeze it immediately in the app (Cards → Card settings → Block card) or call our emergency number.\nEn cas de perte/vol, bloquez la carte via l'application et contactez le service client.";
             }
 
             else if (message.contains("blocked")) {
-                return "Your card is blocked. You can check the reason in Security settings.";
+                return "Your card is blocked. You can check the reason in Security → Card Status. If you need to unblock it, follow the verification steps in the app or contact support for manual assistance.";
             }
 
             else {
-                return "You can manage everything related to your cards in Credit Card → My Cards.";
+                return "You can manage everything related to your cards in Cards → My Cards: view limits, recent transactions, block/unblock, and set contactless preferences.\nPour gérer vos cartes : Cartes → Mes cartes.";
             }
         }
 
@@ -101,15 +111,15 @@ public class ChatbotService {
         if (message.contains("credit") && !message.contains("card")) {
 
             if (message.contains("history")) {
-                return "You can check all your credit requests in Credit → Request History.";
+                return "You can check all your loan/credit requests in Credit → Request History. Each request shows status, required documents and next steps.\nVous pouvez voir vos demandes et pièces manquantes dans Crédit → Historique.";
             }
 
             else if (message.contains("rejected")) {
-                return "Your credit request was rejected, usually due to missing documents or eligibility issues.";
+                return "If a loan request was rejected it's usually due to missing documents, eligibility criteria, or score. Check the rejection reason in Credit → Request History and upload any missing documents to appeal. Pour contester, contactez le service crédit.";
             }
 
             else {
-                return "To apply for credit, go to Credit → Credit Request.";
+                return "To apply for a loan, go to Credit → New Request and complete the form. Typical required documents: ID, proof of income, and bank statements. Processing time depends on the product (usually 24–72 hours).\nPour une demande de crédit, allez dans Crédit → Nouvelle demande.";
             }
         }
 
@@ -119,15 +129,15 @@ public class ChatbotService {
         if (message.contains("transfer")) {
 
             if (message.contains("failed") || message.contains("error")) {
-                return "Your transfer didn’t go through. Double-check the details and try again.";
+                return "Your transfer didn’t go through. Common causes: incorrect account number/IBAN, insufficient funds, or network issues. Check the recipient details, your available balance, and try again. If funds were debited but not delivered, open a support ticket with the transaction ID.\nCauses courantes : IBAN incorrect, solde insuffisant. En cas de débit sans bonne réception, contactez le support.";
             }
 
             else if (message.contains("history")) {
-                return "You can view all your transfers in Transfer → History.";
+                return "You can view all your transfers in Transfer → History, filter by date and status, and download a CSV or PDF of transactions.\nConsultez Virements → Historique pour les détails.";
             }
 
             else {
-                return "To send money, go to Transfer → Bank Transfer.";
+                return "To send money: open Transfer → New Transfer, enter recipient name, IBAN, amount and reason, then confirm with your authentication method (PIN/biometrics). For international transfers check fees and exchange rates first.";
             }
         }
 
@@ -139,21 +149,21 @@ public class ChatbotService {
         }
 
         else if (message.contains("market")) {
-            return "Market Watch shows live prices and market trends in real time, to visit it go to Stocks → market watch.";
+            return "Market Watch shows live prices and market trends in real time. You can create price alerts and add tickers to your watchlist in Stocks → Market Watch.";
         }
 
         else if (message.contains("portfolio")) {
-            return "Your Portfolio shows all your investments and how they are performing, to visit it go to Stocks → Portfolio.";
+            return "Your Portfolio shows all your investments and performance metrics (NAV, P&L, allocation). For tax or reporting, export your portfolio from Stocks → Portfolio → Export.";
         }
 
         else if (message.contains("stock") || message.contains("trade")) {
 
             if (message.contains("history")) {
-                return "You can check your trading history in Stocks → Order History.";
+                return "You can check your trading history in Stocks → Order History. Each order includes execution time, price, fees and status.";
             }
 
             else {
-                return "In Stocks, you can trade, follow the market, and manage your portfolio.";
+                return "In Stocks, you can trade, follow the market, set alerts, and manage your portfolio. If you need help placing an order, I can walk you through the steps.";
             }
         }
 
@@ -163,12 +173,31 @@ public class ChatbotService {
         if (message.contains("settings") || message.contains("password")) {
 
             if (message.contains("reset") || message.contains("forgot")) {
-                return "If you forgot your password, you can reset it in Settings → Reset Password.";
+                return "If you forgot your password, use Settings → Reset Password and follow the verification prompts (email or SMS code). If you don't receive a code, check spam or contact support.";
             }
 
             else {
-                return "You can manage your account and security in the Settings section.";
+                return "You can manage your account, update personal details, enable two‑factor authentication and review active sessions in Settings → Security.";
             }
+        }
+
+        // =========================================================
+        // IBAN / STATEMENTS / FEES / SUPPORT
+        // =========================================================
+        if (message.contains("iban") || message.contains("account number") || message.contains("numéro de compte") ) {
+            return "Your IBAN and full account details are available in Accounts → Details. For official statements, go to Accounts → Statements and download monthly PDFs.\nVotre IBAN est visible dans Comptes → Détails.";
+        }
+
+        if (message.contains("statement") || message.contains("relevé") || message.contains("pdf")) {
+            return "To get an account statement: Accounts → Statements → Select period → Download PDF. If you need a certified statement for official use, contact support for a stamped copy.";
+        }
+
+        if (message.contains("fees") || message.contains("frais")) {
+            return "Fees and commissions are listed in Help → Fees & Pricing. Typical fees: domestic transfer fee, card issuance fee, and international transfer markup. For exact amounts check the product page or ask me about a specific fee.";
+        }
+
+        if (message.contains("support") || message.contains("contact") || message.contains("aide") || message.contains("assistance")) {
+            return "You can reach support via Help → Contact Us (in-app chat), by phone at +1-800-555-0123, or by email at support@example.com. Provide transaction IDs and timestamps when reporting a problem to speed up resolution.";
         }
 
         // =========================================================

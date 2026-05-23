@@ -24,7 +24,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -47,6 +46,9 @@ public class AllocationAdminService {
 
     @Value("${bea.uploads.root:../bea-client/uploads}")
     private String uploadsRoot;
+
+    @Value("${bea.public-base-url:http://localhost:8080}")
+    private String publicBaseUrl;
 
     @Transactional(readOnly = true)
     public List<AllocationAdminResponse> listAll() {
@@ -168,14 +170,10 @@ public class AllocationAdminService {
             throw new RuntimeException("Document non disponible");
         }
         try {
-            Path path = Paths.get(pathValue).normalize();
-            if (!path.isAbsolute()) {
-                path = Paths.get(uploadsRoot).resolve(path).normalize();
-            }
+            Path path = resolveStoredFilePath(pathValue);
             Resource resource = new UrlResource(path.toUri());
             if (!resource.exists() || !resource.isReadable()) {
-                path = Paths.get(pathValue).normalize();
-                resource = new UrlResource(path.toUri());
+                resource = new UrlResource(Paths.get(pathValue).toAbsolutePath().normalize().toUri());
             }
             if (!resource.exists() || !resource.isReadable()) {
                 throw new RuntimeException("Fichier introuvable");
@@ -184,6 +182,22 @@ public class AllocationAdminService {
         } catch (Exception ex) {
             throw new RuntimeException("Impossible de charger le document", ex);
         }
+    }
+
+    private Path resolveStoredFilePath(String pathValue) {
+        Path candidate = Paths.get(pathValue).normalize();
+        if (candidate.isAbsolute()) {
+            return candidate;
+        }
+
+        Path uploadsRootPath = Paths.get(uploadsRoot).toAbsolutePath().normalize();
+        if (candidate.startsWith(Paths.get("uploads"))) {
+            candidate = uploadsRootPath.resolve(Paths.get("uploads").relativize(candidate)).normalize();
+        } else {
+            candidate = uploadsRootPath.resolve(candidate).normalize();
+        }
+
+        return candidate.toAbsolutePath().normalize();
     }
 
     public MediaType resolveMediaType(String fileName) {

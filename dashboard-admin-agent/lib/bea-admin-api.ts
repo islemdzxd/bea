@@ -1,4 +1,4 @@
-const DEFAULT_ADMIN_API_BASE_URL = 'http://localhost:8080';
+const DEFAULT_ADMIN_API_BASE_URL = 'http://localhost:8081';
 const BROWSER_PROXY_PREFIX = '/api-admin';
 
 function isAbsoluteUrl(path: string) {
@@ -61,7 +61,7 @@ export async function adminRequest<T>(path: string, init?: RequestInit): Promise
     });
   } catch {
     throw new Error(
-      'Impossible de joindre bea-admin. Démarrez-le sur le port 8080 (mvn spring-boot:run dans bea-admin).'
+      'Impossible de joindre bea-admin. Démarrez-le sur le port 8081 (mvn spring-boot:run dans bea-admin).'
     );
   }
 

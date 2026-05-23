@@ -24,7 +24,7 @@ import { formatAmountDzd, formatDate, formatDateTime } from '@/lib/format';
 export default function CreditDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  readonly params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
   const { request, loading, error, refresh } = useCredit(id);
@@ -120,7 +120,6 @@ export default function CreditDetailPage({
         <h3 className="font-semibold">Dossier crédit</h3>
         <dl className="grid sm:grid-cols-2 gap-3 text-sm">
           <Item label="Code client" value={request.codeClient} />
-          <Item label="Email" value={request.clientEmail || '—'} />
           <Item label="Type de prêt" value={request.typePret} />
           <Item label="Montant" value={formatAmountDzd(request.montantPret)} />
           <Item label="Durée" value={`${request.dureeMois} mois`} />
@@ -188,8 +187,11 @@ export default function CreditDetailPage({
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="text-sm font-medium">Date et heure du RDV</label>
+              <label htmlFor="credit-appointment-at" className="text-sm font-medium">
+                Date et heure du RDV
+              </label>
               <Input
+                id="credit-appointment-at"
                 type="datetime-local"
                 value={appointmentAt}
                 onChange={(e) => setAppointmentAt(e.target.value)}
@@ -197,8 +199,11 @@ export default function CreditDetailPage({
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Instructions client</label>
+              <label htmlFor="credit-appointment-note" className="text-sm font-medium">
+                Instructions client
+              </label>
               <Textarea
+                id="credit-appointment-note"
                 className="mt-1"
                 rows={3}
                 value={appointmentNote}
@@ -249,7 +254,7 @@ export default function CreditDetailPage({
   );
 }
 
-function Item({ label, value }: { label: string; value: string }) {
+function Item({ label, value }: Readonly<{ label: string; value: string }>) {
   return (
     <div>
       <dt className="text-muted-foreground">{label}</dt>

@@ -42,6 +42,9 @@ public class CreditAdminService {
     @Value("${bea.uploads.root:../bea-client/uploads}")
     private String uploadsRoot;
 
+    @Value("${bea.public-base-url:http://localhost:8080}")
+    private String publicBaseUrl;
+
     @Transactional(readOnly = true)
     public List<CreditAdminResponse> listAll() {
         return creditRepository.findAllByOrderByDateOuvertureDossierDesc().stream()
@@ -117,13 +120,10 @@ public class CreditAdminService {
             throw new RuntimeException("Document non disponible");
         }
         try {
-            Path path = Paths.get(pathValue).normalize();
-            if (!path.isAbsolute()) {
-                path = Paths.get(uploadsRoot).resolve(path).normalize();
-            }
+            Path path = resolveStoredFilePath(pathValue);
             Resource resource = new UrlResource(path.toUri());
             if (!resource.exists() || !resource.isReadable()) {
-                resource = new UrlResource(Paths.get(pathValue).normalize().toUri());
+                resource = new UrlResource(Paths.get(pathValue).toAbsolutePath().normalize().toUri());
             }
             if (!resource.exists() || !resource.isReadable()) {
                 throw new RuntimeException("Fichier introuvable");
@@ -132,6 +132,22 @@ public class CreditAdminService {
         } catch (Exception ex) {
             throw new RuntimeException("Impossible de charger le document", ex);
         }
+    }
+
+    private Path resolveStoredFilePath(String pathValue) {
+        Path candidate = Paths.get(pathValue).normalize();
+        if (candidate.isAbsolute()) {
+            return candidate;
+        }
+
+        Path uploadsRootPath = Paths.get(uploadsRoot).toAbsolutePath().normalize();
+        if (candidate.startsWith(Paths.get("uploads"))) {
+            candidate = uploadsRootPath.resolve(Paths.get("uploads").relativize(candidate)).normalize();
+        } else {
+            candidate = uploadsRootPath.resolve(candidate).normalize();
+        }
+
+        return candidate.toAbsolutePath().normalize();
     }
 
     public MediaType resolveMediaType(String fileName) {
@@ -216,7 +232,7 @@ public class CreditAdminService {
                 .id(id)
                 .label(label)
                 .fileName(Paths.get(path).getFileName().toString())
-            .contentType(resolveMediaType(Paths.get(path).getFileName().toString()).toString())
+                .contentType(resolveMediaType(Paths.get(path).getFileName().toString()).toString())
                 .downloadUrl("/api/credits/" + numero + "/documents/" + id)
                 .build());
     }

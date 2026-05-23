@@ -1,4 +1,4 @@
-const DEFAULT_CLIENT_API_BASE_URL = 'http://localhost:8081';
+const DEFAULT_CLIENT_API_BASE_URL = 'http://localhost:8080';
 
 function resolveApiBaseUrl() {
   return process.env.NEXT_PUBLIC_CLIENT_API_BASE_URL ?? DEFAULT_CLIENT_API_BASE_URL;
@@ -17,6 +17,14 @@ function readToken() {
 
 async function parseError(response: Response) {
   try {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = (await response.json()) as { message?: string };
+      if (data?.message) {
+        return data.message;
+      }
+    }
+
     const text = await response.text();
     return text.trim() || response.statusText || 'Request failed';
   } catch {

@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Eye, EyeOff, CheckCircle } from 'lucide-react';
+import { postJson } from '@/lib/bea-api';
 import { getSessionClientProfile } from '@/lib/client-session';
 
 export default function SettingsPage() {
@@ -21,6 +22,7 @@ export default function SettingsPage() {
   });
   const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
   const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
   const [profileForm, setProfileForm] = useState({
     firstName: '',
@@ -115,7 +117,7 @@ export default function SettingsPage() {
     return errors;
   };
 
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  const handlePasswordSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     const errors = validatePasswordForm();
 
@@ -124,17 +126,34 @@ export default function SettingsPage() {
       return;
     }
 
-    // Mock password change
-    setPasswordSuccess('Password changed successfully!');
-    setPasswordForm({
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: '',
-    });
-    setTimeout(() => setPasswordSuccess(''), 3000);
+    setPasswordLoading(true);
+    setPasswordErrors({});
+    setPasswordSuccess('');
+
+    try {
+      await postJson<{ message: string }>('/api/password/change', {
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+        confirmPassword: passwordForm.confirmPassword,
+      });
+
+      setPasswordSuccess('Password changed successfully!');
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
+      setTimeout(() => setPasswordSuccess(''), 3000);
+    } catch (error) {
+      setPasswordErrors({
+        submit: error instanceof Error ? error.message : 'Unable to change password',
+      });
+    } finally {
+      setPasswordLoading(false);
+    }
   };
 
-  const handleProfileSubmit = (e: React.FormEvent) => {
+  const handleProfileSubmit = (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     const errors = validateProfileForm();
 
@@ -209,9 +228,10 @@ export default function SettingsPage() {
           <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-md">
             {/* Current Password */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Current Password *</label>
+              <label htmlFor="current-password" className="text-sm font-medium text-foreground">Current Password *</label>
               <div className="relative">
                 <Input
+                  id="current-password"
                   type={showPasswords.current ? 'text' : 'password'}
                   name="currentPassword"
                   placeholder="••••••••"
@@ -243,9 +263,10 @@ export default function SettingsPage() {
 
             {/* New Password */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">New Password *</label>
+              <label htmlFor="new-password" className="text-sm font-medium text-foreground">New Password *</label>
               <div className="relative">
                 <Input
+                  id="new-password"
                   type={showPasswords.new ? 'text' : 'password'}
                   name="newPassword"
                   placeholder="••••••••"
@@ -278,9 +299,10 @@ export default function SettingsPage() {
 
             {/* Confirm Password */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Confirm Password *</label>
+              <label htmlFor="confirm-password" className="text-sm font-medium text-foreground">Confirm Password *</label>
               <div className="relative">
                 <Input
+                  id="confirm-password"
                   type={showPasswords.confirm ? 'text' : 'password'}
                   name="confirmPassword"
                   placeholder="••••••••"
@@ -313,9 +335,13 @@ export default function SettingsPage() {
             <Button
               type="submit"
               className="w-full bg-primary hover:bg-blue-900 text-white font-semibold"
+              disabled={passwordLoading}
             >
-              Update Password
+              {passwordLoading ? 'Updating...' : 'Update Password'}
             </Button>
+            {passwordErrors.submit && (
+              <p className="text-sm text-red-500">{passwordErrors.submit}</p>
+            )}
           </form>
 
           <div className="mt-8 p-4 bg-blue-50 border border-primary/20 rounded-lg">
@@ -346,8 +372,9 @@ export default function SettingsPage() {
             {/* Name Row */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">First Name *</label>
+                <label htmlFor="first-name" className="text-sm font-medium text-foreground">First Name *</label>
                 <Input
+                  id="first-name"
                   type="text"
                   name="firstName"
                   value={profileForm.firstName}
@@ -360,8 +387,9 @@ export default function SettingsPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Last Name *</label>
+                <label htmlFor="last-name" className="text-sm font-medium text-foreground">Last Name *</label>
                 <Input
+                  id="last-name"
                   type="text"
                   name="lastName"
                   value={profileForm.lastName}
@@ -376,8 +404,9 @@ export default function SettingsPage() {
 
             {/* Email */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Email *</label>
+              <label htmlFor="email" className="text-sm font-medium text-foreground">Email *</label>
               <Input
+                id="email"
                 type="email"
                 name="email"
                 value={profileForm.email}
@@ -391,8 +420,9 @@ export default function SettingsPage() {
 
             {/* Phone */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Phone *</label>
+              <label htmlFor="phone" className="text-sm font-medium text-foreground">Phone *</label>
               <Input
+                id="phone"
                 type="tel"
                 name="phone"
                 value={profileForm.phone}
@@ -500,8 +530,9 @@ export default function SettingsPage() {
 
             {/* Session Timeout */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Session Timeout</label>
+              <label htmlFor="session-timeout" className="text-sm font-medium text-foreground">Session Timeout</label>
               <select
+                id="session-timeout"
                 value={securitySettings.sessionTimeout}
                 onChange={(e) =>
                   handleSecurityChange('sessionTimeout', e.target.value)

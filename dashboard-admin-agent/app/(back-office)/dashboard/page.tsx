@@ -25,7 +25,7 @@ export default function DashboardPage() {
         <p className="text-sm text-red-800 mt-2">{error}</p>
         <p className="text-xs text-red-700 mt-2">
           Vérifiez que le backend tourne sur{' '}
-          {process.env.NEXT_PUBLIC_ADMIN_API_BASE_URL ?? 'http://localhost:8080'}
+          {process.env.NEXT_PUBLIC_ADMIN_API_BASE_URL ?? 'http://localhost:8081'}
         </p>
       </Card>
     );

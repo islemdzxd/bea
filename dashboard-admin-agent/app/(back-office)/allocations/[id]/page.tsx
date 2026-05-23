@@ -31,7 +31,7 @@ import { formatAmountDzd, formatAmountEur, formatDate, formatDateTime } from '@/
 export default function AllocationDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  readonly params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
   const { request, loading, error, refresh } = useAllocation(id);
@@ -151,8 +151,6 @@ export default function AllocationDetailPage({
       <Card className="p-5 space-y-3">
         <h3 className="font-semibold">Informations client & voyage</h3>
         <dl className="grid sm:grid-cols-2 gap-3 text-sm">
-          <Item label="Email" value={request.clientEmail || '—'} />
-          <Item label="Téléphone" value={request.clientPhone || '—'} />
           <Item label="NIN" value={request.nin} />
           <Item label="Passeport" value={request.passportNumber} />
           <Item label="Destination" value={request.destination} />
@@ -332,7 +330,7 @@ export default function AllocationDetailPage({
   );
 }
 
-function Item({ label, value }: { label: string; value: string }) {
+function Item({ label, value }: Readonly<{ label: string; value: string }>) {
   return (
     <div>
       <dt className="text-muted-foreground">{label}</dt>
